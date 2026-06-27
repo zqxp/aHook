@@ -209,9 +209,9 @@ local function RunLoader()
 	if addonSrc then
 		local ok, fn = pcall(loadstring, addonSrc)
 		if ok and fn then
-			local ok2, addons = pcall(fn)
-			if ok2 and type(addons) == "table" then
-				ThemeManager, SaveManager = addons[1], addons[2]
+			local ok2, tm, sm = pcall(fn)
+			if ok2 then
+				ThemeManager, SaveManager = tm, sm
 			end
 		end
 	end
