@@ -13,7 +13,7 @@ local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
-local BaseRepo = "https://raw.githubusercontent.com/zqxp/aHook/main/"
+local BaseRepo = "https://cdn.jsdelivr.net/gh/zqxp/aHook@main/"
 local ModuleFolder = BaseRepo .. "modules/"
 
 local LoadingScreen = Instance.new("ScreenGui")
