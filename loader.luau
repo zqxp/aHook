@@ -73,84 +73,99 @@ local function UpdateLoading(text, percent)
 	tween:Play()
 end
 
-local function FetchModule(url)
-	local retries = 3
+local HttpService = game:GetService("HttpService")
+
+local function FetchModule(url, isLarge)
+	local retries = isLarge and 5 or 3
+	local waitTime = isLarge and 1.5 or 0.5
 	for i = 1, retries do
-		local success, result = pcall(function()
-			return game:HttpGet(url)
+		local result
+		local ok = pcall(function()
+			result = game:HttpGet(url)
 		end)
-		if success and result and #result > 0 then
+		if ok and result and #result > 0 then
 			return result
 		end
-		task.wait(0.5)
+		if not ok and not isLarge then
+			-- Try HttpService as fallback
+			pcall(function()
+				result = HttpService:GetAsync(url)
+			end)
+			if result and #result > 0 then
+				return result
+			end
+		end
+		task.wait(waitTime)
 	end
-	return nil
+	return nil, "all retries exhausted"
+end
+
+local function TryLoadString(src, name)
+	local fn, compileErr = loadstring(src)
+	if not fn then
+		return nil, "compile error: " .. tostring(compileErr)
+	end
+	local ok, result = pcall(fn)
+	if not ok then
+		return nil, "runtime error: " .. tostring(result)
+	end
+	return result
 end
 
 local function LoadModule(name)
 	local url = ModuleFolder .. name .. ".luau"
-	local src = FetchModule(url)
+	local src, fetchErr = FetchModule(url)
 	if not src then
-		warn("aHook: Failed to load module: " .. name)
+		warn("aHook: Failed to load module: " .. name .. " (" .. tostring(fetchErr) .. ")")
 		return nil
 	end
-	local success, result = pcall(loadstring, src)
-	if not success then
-		warn("aHook: Failed to compile module: " .. name .. " - " .. tostring(result))
-		return nil
+	local mod, loadErr = TryLoadString(src, name)
+	if not mod then
+		warn("aHook: Failed to init module: " .. name .. " (" .. tostring(loadErr) .. ")")
 	end
-	local success2, module = pcall(result)
-	if not success2 then
-		warn("aHook: Failed to init module: " .. name .. " - " .. tostring(module))
-		return nil
-	end
-	return module
+	return mod
 end
 
-local progress = {
-	{ text = "Bypassing Anti-Cheat...", pct = 0.05 },
-	{ text = "Loading UI Library...", pct = 0.15 },
-	{ text = "Loading Addons...", pct = 0.25 },
-	{ text = "Loading Data...", pct = 0.35 },
-	{ text = "Loading Combat...", pct = 0.45 },
-	{ text = "Loading Rage System...", pct = 0.50 },
-	{ text = "Loading ESP...", pct = 0.60 },
-	{ text = "Loading Visuals...", pct = 0.65 },
-	{ text = "Loading Movement...", pct = 0.70 },
-	{ text = "Loading Skin Changer...", pct = 0.78 },
-	{ text = "Loading Animation...", pct = 0.85 },
-	{ text = "Loading Storage...", pct = 0.90 },
-	{ text = "Building UI...", pct = 0.95 },
-	{ text = "Ready!", pct = 1.0 },
-}
-
 local function RunLoader()
-	UpdateLoading(progress[1].text, progress[1].pct)
+	-- Diagnostics: test GitHub reachability
+	local testOk, testResult = pcall(function()
+		return game:HttpGet(BaseRepo .. "loader.luau")
+	end)
+	if not testOk or not testResult or #testResult < 10 then
+		LoadingStatus.Text = "Failed: cannot reach GitHub (" .. tostring(testResult) .. ")"
+		task.wait(4)
+		LoadingScreen:Destroy()
+		return
+	end
+
+	-- Step 1: UI Library (fetch first, before AC hooks)
+	UpdateLoading("Loading UI Library...", 0.15)
+	local libUrl = BaseRepo .. "library.luau"
+	local libSrc, libErr = FetchModule(libUrl, true)
+	local Library, ThemeManager, SaveManager
+	if libSrc then
+		local lib, loadErr = TryLoadString(libSrc, "library")
+		if lib then
+			Library = lib
+		else
+			libErr = loadErr
+		end
+	else
+		libErr = libErr or "fetch returned nil"
+	end
+	if not Library then
+		LoadingStatus.Text = "Failed: UI library (" .. tostring(libErr) .. ")"
+		task.wait(5)
+		LoadingScreen:Destroy()
+		return
+	end
 	task.wait(0.3)
 
-	-- Step 1: AC Bypass
+	-- Step 2: AC Bypass
 	UpdateLoading("Bypassing Anti-Cheat...", 0.05)
 	local acSrc = FetchModule(ModuleFolder .. "anticheat.luau")
 	if acSrc then
 		pcall(loadstring(acSrc))
-	end
-	task.wait(0.4)
-
-	-- Step 2: UI Library
-	UpdateLoading("Loading UI Library...", 0.15)
-	local libSrc = FetchModule(BaseRepo .. "library.luau")
-	local Library, ThemeManager, SaveManager
-	if libSrc then
-		local success, lib = pcall(loadstring, libSrc)
-		if success and lib then
-			Library = lib
-		end
-	end
-	if not Library then
-		LoadingStatus.Text = "Failed to load UI library"
-		task.wait(3)
-		LoadingScreen:Destroy()
-		return
 	end
 	task.wait(0.3)
 
