@@ -144,8 +144,30 @@ local function RunLoader()
 
 	-- Step 1: UI Library (fetch first, before AC hooks)
 	UpdateLoading("Loading UI Library...", 0.15)
-	local libUrl = BaseRepo .. "library.luau"
-	local libSrc, libErr = FetchModule(libUrl, true)
+	local libSrc, libErr
+
+	-- Try single file first
+	libSrc = FetchModule(BaseRepo .. "library.luau", true)
+
+	-- Fallback: try split parts
+	if not libSrc then
+		UpdateLoading("Loading UI Library (part 1/3)...", 0.12)
+		local a = FetchModule(BaseRepo .. "library_a.luau")
+		if a then
+			UpdateLoading("Loading UI Library (part 2/3)...", 0.14)
+			local b = FetchModule(BaseRepo .. "library_b.luau")
+			if b then
+				UpdateLoading("Loading UI Library (part 3/3)...", 0.14)
+				local c = FetchModule(BaseRepo .. "library_c.luau")
+				if c then
+					libSrc = a .. b .. c
+				end
+			end
+		end
+		if not libSrc then
+			libErr = "split fetch failed"
+		end
+	end
 	local Library, ThemeManager, SaveManager
 	if libSrc then
 		local lib, loadErr = TryLoadString(libSrc, "library")
