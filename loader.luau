@@ -30,11 +30,12 @@ LoadingFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
 LoadingFrame.BorderMode = Enum.BorderMode.Inset
 LoadingFrame.Parent = LoadingScreen
 
+local VERSION = "v3"
 local LoadingTitle = Instance.new("TextLabel")
 LoadingTitle.Size = UDim2.new(1, 0, 0, 30)
 LoadingTitle.Position = UDim2.new(0, 0, 0, 10)
 LoadingTitle.BackgroundTransparency = 1
-LoadingTitle.Text = "aHook"
+LoadingTitle.Text = "aHook " .. VERSION
 LoadingTitle.TextColor3 = Color3.fromRGB(214, 141, 168)
 LoadingTitle.TextSize = 20
 LoadingTitle.Font = Enum.Font.Code
@@ -76,10 +77,10 @@ end
 local HttpService = game:GetService("HttpService")
 
 local function Sanitize(str)
-	-- Strip UTF-8 BOM and any other leading junk
-	str = str:gsub("^\239\187\191", "")
-		:gsub("^\254\255", "")
-		:gsub("^\255\254", "")
+	-- Aggressively strip ALL BOM variants anywhere in the string
+	str = str:gsub("\239\187\191", "")  -- UTF-8 BOM
+	str = str:gsub("\254\255", "")      -- UTF-16 BE BOM
+	str = str:gsub("\255\254", "")      -- UTF-16 LE BOM
 	return str
 end
 
@@ -177,18 +178,22 @@ local function RunLoader()
 	end
 	local Library, ThemeManager, SaveManager
 	if libSrc then
+		-- Show first 20 bytes for debugging
+		local hexDump = libSrc:sub(1, 20):gsub(".", function(c) return string.format("%02X ", string.byte(c)) end)
+		LoadingStatus.Text = "Debug: " .. hexDump
+		task.wait(2)
 		local lib, loadErr = TryLoadString(libSrc, "library")
 		if lib then
 			Library = lib
 		else
-			libErr = loadErr .. " (first bytes: " .. libSrc:sub(1, 8):gsub(".", function(c) return string.format("%02X ", string.byte(c)) end) .. ")"
+			libErr = loadErr .. " [hex: " .. hexDump .. "]"
 		end
 	else
 		libErr = libErr or "fetch returned nil"
 	end
 	if not Library then
-		LoadingStatus.Text = "Failed: UI library (" .. tostring(libErr) .. ")"
-		task.wait(5)
+		LoadingStatus.Text = "Failed: " .. tostring(libErr)
+		task.wait(6)
 		LoadingScreen:Destroy()
 		return
 	end
