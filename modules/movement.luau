@@ -138,7 +138,7 @@ function Movement:ApplyJumpPower()
 end
 
 function Movement:BuildUI(Tab)
-	local MoveGroup = Tab:AddLeftGroupbox("Movement  ‍🏃")
+	local MoveGroup = Tab:AddLeftGroupbox("Movement")
 	MoveGroup:AddToggle("Movement_Flight", {
 		Text = "Flight",
 		Default = false,

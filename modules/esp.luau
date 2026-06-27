@@ -219,7 +219,7 @@ function ESP:SetupChams()
 end
 
 function ESP:BuildUI(Tab)
-	local ESPGroup = Tab:AddLeftGroupbox("ESP  ‍👁️")
+	local ESPGroup = Tab:AddLeftGroupbox("ESP")
 	ESPGroup:AddToggle("ESP_Box", {
 		Text = "Box ESP",
 		Default = false,

@@ -262,7 +262,7 @@ function Rage:SetupFakelag()
 end
 
 function Rage:BuildUI(Tab)
-	local RageGroup = Tab:AddLeftGroupbox("Ragebot  ‍💥")
+	local RageGroup = Tab:AddLeftGroupbox("Ragebot")
 	RageGroup:AddToggle("Ragebot", {
 		Text = "Ragebot",
 		Default = false,
@@ -334,7 +334,7 @@ function Rage:BuildUI(Tab)
 		Text = "Rage Key",
 	})
 
-	local ResolverGroup = Tab:AddRightGroupbox("Resolver  ‍🔧")
+	local ResolverGroup = Tab:AddRightGroupbox("Resolver")
 	ResolverGroup:AddDropdown("Ragebot_Resolver", {
 		Text = "Resolver Mode",
 		Default = 1,

@@ -181,7 +181,7 @@ function Combat:SetupTriggerbot()
 end
 
 function Combat:BuildUI(Tab)
-	local SilentAimGroup = Tab:AddLeftGroupbox("Silent Aim  ‍🎯")
+	local SilentAimGroup = Tab:AddLeftGroupbox("Silent Aim")
 	SilentAimGroup:AddToggle("SilentAim", {
 		Text = "Silent Aim",
 		Default = false,
@@ -252,7 +252,7 @@ function Combat:BuildUI(Tab)
 		NoUI = false
 	})
 
-	local TriggerGroup = Tab:AddRightGroupbox("Triggerbot  ‍⚡")
+	local TriggerGroup = Tab:AddRightGroupbox("Triggerbot")
 	TriggerGroup:AddToggle("Triggerbot", {
 		Text = "Triggerbot",
 		Default = false,
@@ -284,7 +284,7 @@ function Combat:BuildUI(Tab)
 	TriggerGroup:AddDivider()
 
 	local AimbotGroup = TriggerGroup:AddDependencyBox()
-	AimbotGroup:AddLabel("Aimbot  ‍🖱️")
+	AimbotGroup:AddLabel("Aimbot")
 	AimbotGroup:AddToggle("Aimbot", {
 		Text = "Aimbot (Mouse)",
 		Default = false,

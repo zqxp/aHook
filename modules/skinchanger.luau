@@ -127,7 +127,7 @@ function SkinChanger:ResetIcons()
 end
 
 function SkinChanger:BuildUI(Tab)
-	local WeaponGroup = Tab:AddLeftGroupbox("Weapons  ‍🔫")
+	local WeaponGroup = Tab:AddLeftGroupbox("Weapons")
 	WeaponGroup:AddDropdown("Skin_Weapon", {
 		Text = "Select Weapon",
 		Default = 1,
@@ -135,7 +135,7 @@ function SkinChanger:BuildUI(Tab)
 		Tooltip = "Choose a weapon to customize"
 	})
 
-	local SkinGroup = Tab:AddRightGroupbox("Customize  ‍🎨")
+	local SkinGroup = Tab:AddRightGroupbox("Customize")
 	SkinGroup:AddDropdown("Skin_Select", {
 		Text = "Skin",
 		Default = 1,

@@ -103,7 +103,7 @@ function Visuals:ApplyFullbright()
 end
 
 function Visuals:BuildUI(Tab)
-	local WorldGroup = Tab:AddRightGroupbox("World  ‍🌍")
+	local WorldGroup = Tab:AddRightGroupbox("World")
 	WorldGroup:AddToggle("Visuals_AntiSmoke", {
 		Text = "Anti-Smoke",
 		Default = false,

@@ -30,7 +30,7 @@ LoadingFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
 LoadingFrame.BorderMode = Enum.BorderMode.Inset
 LoadingFrame.Parent = LoadingScreen
 
-local VERSION = "v3"
+	local VERSION = "v4"
 local LoadingTitle = Instance.new("TextLabel")
 LoadingTitle.Size = UDim2.new(1, 0, 0, 30)
 LoadingTitle.Position = UDim2.new(0, 0, 0, 10)
@@ -178,15 +178,11 @@ local function RunLoader()
 	end
 	local Library, ThemeManager, SaveManager
 	if libSrc then
-		-- Show first 20 bytes for debugging
-		local hexDump = libSrc:sub(1, 20):gsub(".", function(c) return string.format("%02X ", string.byte(c)) end)
-		LoadingStatus.Text = "Debug: " .. hexDump
-		task.wait(2)
 		local lib, loadErr = TryLoadString(libSrc, "library")
 		if lib then
 			Library = lib
 		else
-			libErr = loadErr .. " [hex: " .. hexDump .. "]"
+			libErr = loadErr
 		end
 	else
 		libErr = libErr or "fetch returned nil"
@@ -221,23 +217,22 @@ local function RunLoader()
 	end
 	task.wait(0.3)
 
-	-- Step 4: Create window
+	-- Step 4: Create window (hidden until fully loaded)
 	local Window = Library:CreateWindow({
 		Title = "aHook",
 		Center = true,
-		AutoShow = true,
+		AutoShow = false,
 		TabPadding = 8,
 		MenuFadeTime = 0.2
 	})
 
-	-- Create tabs with emojis
 	local Tabs = {
-		Combat = Window:AddTab("⚔️ Combat"),
-		Rage = Window:AddTab("💥 Rage"),
-		Visuals = Window:AddTab("👁️ Visuals"),
-		Skins = Window:AddTab("🎨 Skins"),
-		Movement = Window:AddTab("🌊 Movement"),
-		Config = Window:AddTab("⚙️ Config"),
+		Combat = Window:AddTab("Combat"),
+		Rage = Window:AddTab("Rage"),
+		Visuals = Window:AddTab("Visuals"),
+		Skins = Window:AddTab("Skins"),
+		Movement = Window:AddTab("Movement"),
+		Config = Window:AddTab("Config"),
 	}
 
 	-- Step 5: Load modules
@@ -301,8 +296,8 @@ local function RunLoader()
 	end
 
 	-- Step 7: Config tab
-	local ConfigLeft = Tabs.Config:AddLeftGroupbox("🎨 Themes")
-	local ConfigRight = Tabs.Config:AddRightGroupbox("⚙️ Configuration")
+	local ConfigLeft = Tabs.Config:AddLeftGroupbox("Themes")
+	local ConfigRight = Tabs.Config:AddRightGroupbox("Configuration")
 
 	if ThemeManager then
 		ThemeManager:SetLibrary(Library)
@@ -318,7 +313,7 @@ local function RunLoader()
 	end
 
 	-- Skin Loadouts UI
-	local SkinLoadoutGroup = Tabs.Config:AddRightGroupbox("🎨 Skin Loadouts")
+	local SkinLoadoutGroup = Tabs.Config:AddRightGroupbox("Skin Loadouts")
 	SkinLoadoutGroup:AddDropdown("SkinLoadout_List", {
 		Text = "Loadout Preset",
 		Values = Storage and Storage:ListSkinLoadouts() or {},
@@ -408,7 +403,7 @@ local function RunLoader()
 	local MenuGroup = Tabs.Config:AddLeftGroupbox("Menu")
 	MenuGroup:AddButton("Unload", function() Library:Unload() end)
 	MenuGroup:AddLabel("Menu Key"):AddKeyPicker("MenuKeybind", {
-		Default = "End",
+		Default = "LeftShift",
 		NoUI = true,
 		Text = "Menu Key"
 	})
@@ -496,8 +491,8 @@ local function RunLoader()
 	-- Notify
 	StarterGui:SetCore("SendNotification", {
 		Title = "aHook",
-		Text = "Loaded successfully!",
-		Duration = 3
+		Text = "Loaded! Press LeftShift to open menu",
+		Duration = 4
 	})
 
 	-- Unload cleanup
