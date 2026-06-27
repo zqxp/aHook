@@ -13,66 +13,88 @@ local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LogService = game:GetService("LogService")
-local ScriptContext = game:GetService("ScriptContext")
 
 local BaseRepo = "https://cdn.jsdelivr.net/gh/zqxp/aHook@main/"
 local ModuleFolder = BaseRepo .. "modules/"
 
--- Loading Screen
 local LoadingScreen = Instance.new("ScreenGui")
-LoadingScreen.Name = "aHook_Loading"
+LoadingScreen.Name = "aHook_Load"
 LoadingScreen.ZIndexBehavior = Enum.ZIndexBehavior.Global
 LoadingScreen.ResetOnSpawn = false
 LoadingScreen.Parent = CoreGui
 
 local LoadingFrame = Instance.new("Frame")
-LoadingFrame.Size = UDim2.new(0, 300, 0, 100)
-LoadingFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
-LoadingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-LoadingFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
+LoadingFrame.Size = UDim2.new(0, 340, 0, 120)
+LoadingFrame.Position = UDim2.new(0.5, -170, 0.5, -60)
+LoadingFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+LoadingFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
 LoadingFrame.BorderMode = Enum.BorderMode.Inset
 LoadingFrame.Parent = LoadingScreen
 
+local LoadingCorner = Instance.new("UICorner")
+LoadingCorner.CornerRadius = UDim.new(0, 6)
+LoadingCorner.Parent = LoadingFrame
+
+local LoadingStroke = Instance.new("UIStroke")
+LoadingStroke.Color = Color3.fromRGB(50, 50, 50)
+LoadingStroke.Thickness = 1
+LoadingStroke.Parent = LoadingFrame
+
 local LoadingTitle = Instance.new("TextLabel")
-LoadingTitle.Size = UDim2.new(1, 0, 0, 30)
-LoadingTitle.Position = UDim2.new(0, 0, 0, 10)
+LoadingTitle.Size = UDim2.new(1, 0, 0, 28)
+LoadingTitle.Position = UDim2.new(0, 0, 0, 12)
 LoadingTitle.BackgroundTransparency = 1
-LoadingTitle.Text = "aHook"
-LoadingTitle.TextColor3 = Color3.fromRGB(214, 141, 168)
-LoadingTitle.TextSize = 20
+LoadingTitle.Text = "AHOOK"
+LoadingTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoadingTitle.TextSize = 22
 LoadingTitle.Font = Enum.Font.Code
-LoadingTitle.TextStrokeTransparency = 0
+LoadingTitle.TextStrokeTransparency = 0.8
 LoadingTitle.Parent = LoadingFrame
 
+local LoadingSubtitle = Instance.new("TextLabel")
+LoadingSubtitle.Size = UDim2.new(1, 0, 0, 14)
+LoadingSubtitle.Position = UDim2.new(0, 0, 0, 40)
+LoadingSubtitle.BackgroundTransparency = 1
+LoadingSubtitle.Text = "RIVALS INTERNAL"
+LoadingSubtitle.TextColor3 = Color3.fromRGB(120, 120, 120)
+LoadingSubtitle.TextSize = 11
+LoadingSubtitle.Font = Enum.Font.Code
+LoadingSubtitle.Parent = LoadingFrame
+
 local LoadingStatus = Instance.new("TextLabel")
-LoadingStatus.Size = UDim2.new(1, 0, 0, 20)
-LoadingStatus.Position = UDim2.new(0, 0, 0, 45)
+LoadingStatus.Size = UDim2.new(1, 0, 0, 16)
+LoadingStatus.Position = UDim2.new(0, 0, 0, 62)
 LoadingStatus.BackgroundTransparency = 1
-LoadingStatus.Text = "Loading..."
-LoadingStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-LoadingStatus.TextSize = 14
+LoadingStatus.Text = "Initializing..."
+LoadingStatus.TextColor3 = Color3.fromRGB(160, 160, 160)
+LoadingStatus.TextSize = 12
 LoadingStatus.Font = Enum.Font.Code
 LoadingStatus.Parent = LoadingFrame
 
 local LoadingBar = Instance.new("Frame")
-LoadingBar.Size = UDim2.new(0.8, 0, 0, 6)
-LoadingBar.Position = UDim2.new(0.1, 0, 0, 75)
+LoadingBar.Size = UDim2.new(0.85, 0, 0, 4)
+LoadingBar.Position = UDim2.new(0.075, 0, 0, 88)
 LoadingBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-LoadingBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
-LoadingBar.BorderMode = Enum.BorderMode.Inset
+LoadingBar.BorderSizePixel = 0
 LoadingBar.Parent = LoadingFrame
+
+local LoadingBarCorner = Instance.new("UICorner")
+LoadingBarCorner.CornerRadius = UDim.new(0, 2)
+LoadingBarCorner.Parent = LoadingBar
 
 local LoadingBarFill = Instance.new("Frame")
 LoadingBarFill.Size = UDim2.new(0, 0, 1, 0)
-LoadingBarFill.BackgroundColor3 = Color3.fromRGB(214, 141, 168)
+LoadingBarFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 LoadingBarFill.BorderSizePixel = 0
 LoadingBarFill.Parent = LoadingBar
 
+local FillCorner = Instance.new("UICorner")
+FillCorner.CornerRadius = UDim.new(0, 2)
+FillCorner.Parent = LoadingBarFill
+
 local function UpdateLoading(text, percent)
 	LoadingStatus.Text = text
-	local tween = TweenService:Create(LoadingBarFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+	local tween = TweenService:Create(LoadingBarFill, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Size = UDim2.new(percent, 0, 1, 0)
 	})
 	tween:Play()
@@ -99,32 +121,21 @@ end
 
 local function TryLoadString(src)
 	local fn, err = loadstring(src)
-	if not fn then
-		return nil, err
-	end
+	if not fn then return nil, err end
 	local ok, result = pcall(fn)
-	if not ok then
-		return nil, result
-	end
+	if not ok then return nil, result end
 	return result
 end
 
 local function LoadModule(name)
 	local src = FetchModule(ModuleFolder .. name .. ".luau")
-	if not src then
-		return nil
-	end
+	if not src then return nil end
 	local mod, err = TryLoadString(src)
-	if not mod then
-		warn("aHook: " .. name .. " error: " .. tostring(err))
-	end
+	if not mod then warn("aHook: " .. name .. " error: " .. tostring(err)) end
 	return mod
 end
 
-
-
 local function RunLoader()
-	-- Step 1: UI Library
 	UpdateLoading("Loading UI Library...", 0.1)
 	local libSrc = FetchModule(BaseRepo .. "library.luau", true)
 	if not libSrc then
@@ -133,9 +144,7 @@ local function RunLoader()
 			local b = FetchModule(BaseRepo .. "library_b.luau")
 			if b then
 				local c = FetchModule(BaseRepo .. "library_c.luau")
-				if c then
-					libSrc = a .. b .. c
-				end
+				if c then libSrc = a .. b .. c end
 			end
 		end
 	end
@@ -145,6 +154,7 @@ local function RunLoader()
 		LoadingScreen:Destroy()
 		return
 	end
+
 	local Library, ThemeManager, SaveManager
 	do
 		local lib, err = TryLoadString(libSrc)
@@ -158,23 +168,27 @@ local function RunLoader()
 	end
 	task.wait(0.1)
 
-	-- Step 2: Addons
+	Library.FontColor = Color3.fromRGB(220, 220, 220)
+	Library.MainColor = Color3.fromRGB(18, 18, 18)
+	Library.BackgroundColor = Color3.fromRGB(24, 24, 24)
+	Library.AccentColor = Color3.fromRGB(200, 200, 200)
+	Library.OutlineColor = Color3.fromRGB(40, 40, 40)
+	Library.RiskColor = Color3.fromRGB(255, 60, 60)
+
 	UpdateLoading("Loading Addons...", 0.15)
 	local addonSrc = FetchModule(BaseRepo .. "addons.luau")
 	if addonSrc then
 		local fn, cerr = loadstring(addonSrc)
 		if fn then
 			local ok, tm, sm = pcall(fn)
-			if ok then
-				ThemeManager, SaveManager = tm, sm
-			end
+			if ok then ThemeManager, SaveManager = tm, sm end
 		end
 	end
 	task.wait(0.1)
 
-	-- Step 4: Window (hidden until fully loaded)
+	UpdateLoading("Creating Interface...", 0.2)
 	local Window = Library:CreateWindow({
-		Title = "aHook",
+		Title = "ahook",
 		Center = true,
 		AutoShow = false,
 	})
@@ -187,7 +201,6 @@ local function RunLoader()
 		Config = Window:AddTab("Config"),
 	}
 
-	-- Step 5: Load data modules
 	UpdateLoading("Loading Data...", 0.3)
 	local Data = LoadModule("data")
 	getgenv().Data = Data
@@ -196,40 +209,30 @@ local function RunLoader()
 	local Storage = LoadModule("storage")
 	getgenv().Storage = Storage
 
-	-- Step 6: Load feature modules (parallel spawns)
-	UpdateLoading("Loading AntiCheat...", 0.3)
+	UpdateLoading("Loading AntiCheat...", 0.4)
 	local AntiCheat = LoadModule("anticheat")
-	task.wait(0.05)
 
-	UpdateLoading("Loading Combat...", 0.4)
+	UpdateLoading("Loading Combat...", 0.45)
 	local Combat = LoadModule("combat")
-	task.wait(0.05)
 
-	UpdateLoading("Loading Rage System...", 0.45)
+	UpdateLoading("Loading Rage System...", 0.5)
 	local RageSystem = LoadModule("ragesystem")
-	task.wait(0.05)
 
-	UpdateLoading("Loading ESP...", 0.5)
+	UpdateLoading("Loading ESP...", 0.55)
 	local ESP = LoadModule("esp")
-	task.wait(0.05)
 
-	UpdateLoading("Loading Visuals...", 0.55)
+	UpdateLoading("Loading Visuals...", 0.6)
 	local Visuals = LoadModule("visuals")
-	task.wait(0.05)
 
-	UpdateLoading("Loading Movement...", 0.6)
+	UpdateLoading("Loading Movement...", 0.65)
 	local Movement = LoadModule("movement")
-	task.wait(0.05)
 
-	UpdateLoading("Loading Skin Changer...", 0.65)
+	UpdateLoading("Loading Skin Changer...", 0.7)
 	local SkinChanger = LoadModule("skinchanger")
-	task.wait(0.05)
 
-	UpdateLoading("Loading Animation...", 0.7)
+	UpdateLoading("Loading Animation...", 0.75)
 	local Animation = LoadModule("animation")
-	task.wait(0.05)
 
-	-- Step 7: Build UI
 	UpdateLoading("Building UI...", 0.8)
 	if Combat and Combat.BuildUI then Combat:BuildUI(Tabs.Combat) end
 	if RageSystem and RageSystem.BuildUI then RageSystem:BuildUI(Tabs.Rage) end
@@ -239,7 +242,6 @@ local function RunLoader()
 	if SkinChanger and SkinChanger.BuildUI then SkinChanger:BuildUI(Tabs.Skins) end
 	if AntiCheat and AntiCheat.BuildUI then AntiCheat:BuildUI(Tabs.Rage) end
 
-	-- Config tab
 	local ConfigLeft = Tabs.Config:AddLeftGroupbox("Themes")
 	local ConfigRight = Tabs.Config:AddRightGroupbox("Configuration")
 
@@ -269,8 +271,8 @@ local function RunLoader()
 		local data = {
 			weapon = SkinChanger and SkinChanger.CurrentWeapon,
 			skin = SkinChanger and SkinChanger.CurrentSkin,
-			material = Options and Options.Skin_Material and Options.Skin_Material.Value,
-			transparency = Options and Options.Skin_Transparency and Options.Skin_Transparency.Value or 0,
+			material = Options and Options.SkinChanger_Material and Options.SkinChanger_Material.Value,
+			transparency = Options and Options.SkinChanger_Transparency and Options.SkinChanger_Transparency.Value or 0,
 		}
 		local ok, err = Storage:SaveSkinLoadout(name, data)
 		if ok then
@@ -289,11 +291,11 @@ local function RunLoader()
 			if SkinChanger and data.weapon and data.skin then
 				SkinChanger:ApplySkin(data.weapon, data.skin)
 			end
-			if data.material and Options and Options.Skin_Material then
-				Options.Skin_Material:SetValue(data.material)
+			if data.material and Options and Options.SkinChanger_Material then
+				Options.SkinChanger_Material:SetValue(data.material)
 			end
-			if data.transparency and Options and Options.Skin_Transparency then
-				Options.Skin_Transparency:SetValue(data.transparency)
+			if data.transparency and Options and Options.SkinChanger_Transparency then
+				Options.SkinChanger_Transparency:SetValue(data.transparency)
 			end
 			Library:Notify("Loaded: " .. name)
 		end
@@ -324,7 +326,7 @@ local function RunLoader()
 	})
 	Library.ToggleKeybind = MenuKey
 
-	-- Step 8: Init modules
+	UpdateLoading("Initializing Modules...", 0.85)
 	if AntiCheat and AntiCheat.Init then AntiCheat:Init() end
 	if Combat and Combat.Init then Combat:Init() end
 	if RageSystem and RageSystem.Init then RageSystem:Init() end
@@ -334,7 +336,6 @@ local function RunLoader()
 	if SkinChanger and SkinChanger.Init then SkinChanger:Init() end
 	if Animation and Animation.Init then Animation:Init() end
 
-	-- Watermark
 	Library:SetWatermarkVisibility(false)
 	Library:OnUnload(function()
 		if AntiCheat and AntiCheat.Cleanup then AntiCheat:Cleanup() end
@@ -347,7 +348,6 @@ local function RunLoader()
 		if Animation and Animation.Cleanup then Animation:Cleanup() end
 	end)
 
-	-- Step 9: Autoload
 	UpdateLoading("Loading Configs...", 0.9)
 	if ThemeManager then pcall(ThemeManager.Load, ThemeManager) end
 	if SaveManager then pcall(SaveManager.LoadAutoloadConfig, SaveManager) end
@@ -361,17 +361,16 @@ local function RunLoader()
 	end
 	task.wait(0.2)
 
-	-- Step 10: Ready
-	UpdateLoading("Ready!", 1.0)
-	task.wait(0.5)
+	UpdateLoading("Ready", 1.0)
+	task.wait(0.4)
 
-	local fadeOut = TweenService:Create(LoadingScreen, TweenInfo.new(0.3), { Enabled = false })
+	local fadeOut = TweenService:Create(LoadingScreen, TweenInfo.new(0.3), {Enabled = false})
 	fadeOut:Play()
 	task.wait(0.3)
 	LoadingScreen:Destroy()
 
 	StarterGui:SetCore("SendNotification", {
-		Title = "aHook",
+		Title = "ahook",
 		Text = "Loaded. Press LeftShift for menu.",
 		Duration = 4
 	})
@@ -379,11 +378,9 @@ end
 
 local ok, err = pcall(RunLoader)
 if not ok then
-	if LoadingScreen then
-		LoadingScreen:Destroy()
-	end
+	if LoadingScreen then LoadingScreen:Destroy() end
 	StarterGui:SetCore("SendNotification", {
-		Title = "aHook",
+		Title = "ahook",
 		Text = "Error: " .. tostring(err),
 		Duration = 8
 	})

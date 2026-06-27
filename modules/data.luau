@@ -1,48 +1,51 @@
-local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
+local Data = {}
 
-local Data = {
-	Weapons = {},
-	Skins = {},
-	Contracts = {},
-	Maps = {},
-	PlayerStats = {},
-	RemoteNames = {
-		Attack = "Remotes.Attack",
-		Telemetry = "Remotes.Telemetry",
-		Analytics = "Remotes.AnalyticsPipeline.RemoteEvent",
-		Kill = "Remotes.Kill",
-		Damage = "Remotes.Damage",
-		Health = "Remotes.Health",
-	},
-	WeaponList = {
-		"Revolver", "Shotgun", "Rifle", "SMG", "Sniper",
-		"Knife", "Bat", "Hammer", "Sword", "Katana",
-	},
+Data.Weapons = {
+    Primary = {
+        "AK-47", "M4A1", "AR", "Rifle", "Sniper", "Shotgun", "SMG",
+        "FAMAS", "SCAR", "Galil", "Aug", "SG556", "P90", "MP5",
+        "AWP", "Scout", "SSG08", "Nova", "XM1014", "MAG-7",
+    },
+    Secondary = {
+        "Pistol", "Deagle", "Glock", "USP", "P250", "Five-SeveN",
+        "Tec-9", "CZ75", "Revolver", "Desert Eagle", "Dual Berettas",
+    },
+    Melee = {
+        "Knife", "Bat", "Sword", "Machete", "Axe", "Crowbar",
+    }
 }
 
-function Data:GetWeaponID(name)
-	return self.Weapons[name]
+Data.RemoteNames = {
+    Attack = "Attack",
+    Analytics = "AnalyticsPipeline",
+    Equip = "Equip",
+    Reload = "Reload",
+}
+
+Data.Maps = {}
+
+Data.PlayerStats = {}
+
+function Data.Encode(tbl)
+    local ok, result = pcall(function()
+        return game:GetService("HttpService"):JSONEncode(tbl)
+    end)
+    return ok and result or nil
 end
 
-function Data:GetSkinID(weapon, skin)
-	local ws = self.Skins[weapon]
-	if ws then
-		return ws[skin]
-	end
-	return nil
+function Data.Decode(str)
+    local ok, result = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(str)
+    end)
+    return ok and result or nil
 end
 
-function Data:Encode(str)
-	if not str then return "" end
-	return HttpService:JSONEncode(str)
+function Data.GetWeaponID(name)
+    return Data.Weapons[name] or nil
 end
 
-function Data:Decode(str)
-	if not str or type(str) ~= "string" then return nil end
-	local ok, result = pcall(HttpService.JSONDecode, HttpService, str)
-	if ok then return result end
-	return nil
+function Data.GetSkinID(name)
+    return Data.Skins and Data.Skins[name] or nil
 end
 
 return Data

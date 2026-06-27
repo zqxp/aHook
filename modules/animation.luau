@@ -1,85 +1,102 @@
+local Animation = {}
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
+
 local LocalPlayer = Players.LocalPlayer
 
-local Animation = {
-	NoAnimation = false,
-	AnimSpeed = 0,
-	AntiAnimation = false,
-	CustomIdle = false,
-	CustomWalk = false,
-	DisableArms = false,
-	NoWeaponSway = false,
-	NoBob = false,
-	Hooked = false,
-	Connections = {},
-	OldAnimate = nil,
-}
+local Connections = {}
+local OriginalAnims = {}
 
-function Animation:SetupHook()
-	if Animation.Hooked then return end
-	if not LocalPlayer.Character then
-		LocalPlayer.CharacterAdded:Connect(function() Animation:SetupHook() end)
-		return
-	end
-	local char = LocalPlayer.Character
-	local animate = char:FindFirstChild("Animate")
-	if not animate then
-		local waitChar = LocalPlayer.CharacterAdded:Wait()
-		animate = waitChar:FindFirstChild("Animate")
-	end
-	if animate and animate:IsA("LocalScript") then
-		Animation.Hooked = true
-		Animation.OldAnimate = animate
-	end
+Animation.NoAnimationEnabled = false
+Animation.DisableArmsEnabled = false
+Animation.NoWeaponSwayEnabled = false
+Animation.NoBobEnabled = false
+
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
 end
 
-function Animation:SetupCharacterWatcher()
-	local conn = RunService.Heartbeat:Connect(function()
-		if not Animation.NoAnimation or not LocalPlayer.Character then return end
-		local humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		if humanoid then
-			local states = {
-				Enum.HumanoidStateType.Running,
-				Enum.HumanoidStateType.Climbing,
-				Enum.HumanoidStateType.Swimming,
-				Enum.HumanoidStateType.Freefall,
-				Enum.HumanoidStateType.Jumping,
-			}
-			for _, state in ipairs(states) do
-				if humanoid:GetState() == state then
-					humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-					break
-				end
-			end
-		end
-	end)
-	table.insert(Animation.Connections, conn)
+local function CancelAnimations()
+    local hum = GetHumanoid()
+    if not hum then return end
+
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        if Animation.NoAnimationEnabled then
+            track:Stop(0)
+        end
+    end
 end
 
-function Animation:BuildUI(Tab)
-	local AG = Tab:AddLeftGroupbox("Animation")
-	AG:AddToggle("Animation_NoAnimation", { Text = "No Animation", Default = false })
-	Toggles.Animation_NoAnimation:OnChanged(function() Animation.NoAnimation = Toggles.Animation_NoAnimation.Value end)
-	AG:AddToggle("Animation_AntiAnimation", { Text = "Anti-Animations", Default = false })
-	Toggles.Animation_AntiAnimation:OnChanged(function() Animation.AntiAnimation = Toggles.Animation_AntiAnimation.Value end)
-	AG:AddToggle("Animation_DisableArms", { Text = "Disable Arms", Default = false })
-	Toggles.Animation_DisableArms:OnChanged(function() Animation.DisableArms = Toggles.Animation_DisableArms.Value end)
-	AG:AddToggle("Animation_NoSway", { Text = "No Weapon Sway", Default = false })
-	Toggles.Animation_NoSway:OnChanged(function() Animation.NoWeaponSway = Toggles.Animation_NoSway.Value end)
-	AG:AddToggle("Animation_NoBob", { Text = "No Weapon Bob", Default = false })
-	Toggles.Animation_NoBob:OnChanged(function() Animation.NoBob = Toggles.Animation_NoBob.Value end)
+local function SetupNoAnimation()
+    table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if not Animation.NoAnimationEnabled then return end
+        CancelAnimations()
+    end))
+end
+
+local function SetupCharacterAdded()
+    table.insert(Connections, LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        if Animation.NoAnimationEnabled then
+            CancelAnimations()
+        end
+    end))
 end
 
 function Animation:Init()
-	self:SetupHook()
-	self:SetupCharacterWatcher()
+    SetupNoAnimation()
+    SetupCharacterAdded()
 end
 
 function Animation:Cleanup()
-	for _, c in ipairs(self.Connections) do c:Disconnect() end
-	self.Connections = {}
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    Connections = {}
+end
+
+function Animation:BuildUI(Tabs)
+    local AnimTab = Tabs
+
+    local AnimBox = AnimTab:AddLeftGroupbox("Animation")
+
+    AnimBox:AddToggle("Anim_NoAnimation", {
+        Text = "No Animation",
+        Default = false,
+        Callback = function(value)
+            Animation.NoAnimationEnabled = value
+        end
+    })
+
+    AnimBox:AddToggle("Anim_DisableArms", {
+        Text = "Disable Arms",
+        Default = false,
+        Callback = function(value)
+            Animation.DisableArmsEnabled = value
+        end
+    })
+
+    AnimBox:AddToggle("Anim_NoSway", {
+        Text = "No Weapon Sway",
+        Default = false,
+        Callback = function(value)
+            Animation.NoWeaponSwayEnabled = value
+        end
+    })
+
+    AnimBox:AddToggle("Anim_NoBob", {
+        Text = "No Weapon Bob",
+        Default = false,
+        Callback = function(value)
+            Animation.NoBobEnabled = value
+        end
+    })
 end
 
 return Animation

@@ -1,261 +1,341 @@
+local Movement = {}
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+
 local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
 
-local Movement = {
-	Fly = false,
-	Speed = false,
-	SpeedAmount = 50,
-	NoClip = false,
-	InfiniteJump = false,
-	BunnyHop = false,
-	DoubleTap = false,
-	DoubleTapSpeed = 100,
-	JumpPower = false,
-	JumpPowerAmount = 100,
-	CFrameWalk = false,
-	CFrameWalkSpeed = 1.5,
-	FlySpeed = 50,
-	FlyVerticalSpeed = 30,
-	Connections = {},
-	Flying = false,
-	BodyVelocity = nil,
-	BodyGyro = nil,
-}
+local Connections = {}
+local FlyBodyVelocity = nil
+local FlyBodyGyro = nil
+local FlyConnection = nil
+local FlyEnabled = false
+local FlySpeed = 50
 
-function Movement:SetupFly()
-	for _, v in ipairs(Movement.Connections) do
-		if v.Name == "Fly" then v:Disconnect() end
-	end
-	if self.BodyVelocity then self.BodyVelocity:Destroy(); self.BodyVelocity = nil end
-	if self.BodyGyro then self.BodyGyro:Destroy(); self.BodyGyro = nil end
+Movement.NoclipEnabled = false
+Movement.SpeedEnabled = false
+Movement.FlyEnabled = false
+Movement.BhopEnabled = false
+Movement.InfiniteJumpEnabled = false
+Movement.CFrameWalkEnabled = false
+Movement.CFrameWalkSpeed = 0.5
 
-	if not Movement.Fly then
-		self.Flying = false
-		return
-	end
+Movement.SpeedMultiplier = 16
 
-	local conn = RunService.RenderStepped:Connect(function()
-		if not Movement.Fly or not LocalPlayer.Character then
-			if self.BodyVelocity then self.BodyVelocity:Destroy(); self.BodyVelocity = nil end
-			if self.BodyGyro then self.BodyGyro:Destroy(); self.BodyGyro = nil end
-			self.Flying = false
-			return
-		end
-		local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		if not root or not hum then return end
+local NoclipConnection = nil
+local SpeedConnection = nil
+local CFrameWalkConnection = nil
 
-		if not self.BodyVelocity then
-			self.BodyVelocity = Instance.new("BodyVelocity")
-			self.BodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-			self.BodyVelocity.P = 1e5
-			self.BodyVelocity.Parent = root
-		end
-		if not self.BodyGyro then
-			self.BodyGyro = Instance.new("BodyGyro")
-			self.BodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-			self.BodyGyro.P = 1e5
-			self.BodyGyro.Parent = root
-		end
-
-		hum.PlatformStand = true
-		self.Flying = true
-
-		local moveDir = Vector3.new()
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Workspace.CurrentCamera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Workspace.CurrentCamera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Workspace.CurrentCamera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Workspace.CurrentCamera.CFrame.RightVector end
-
-		local vertical = 0
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vertical = 1 end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vertical = -1 end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vertical = -1 end
-
-		if moveDir.Magnitude > 0 then
-			moveDir = moveDir.Unit * Movement.FlySpeed
-		end
-		self.BodyVelocity.Velocity = Vector3.new(moveDir.X, vertical * Movement.FlyVerticalSpeed, moveDir.Z)
-		self.BodyGyro.CFrame = Workspace.CurrentCamera.CFrame
-	end)
-	conn.Name = "Fly"
-	table.insert(Movement.Connections, conn)
+local function IsAlive()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    return hum and root and hum.Health > 0
 end
 
-function Movement:SetupSpeed()
-	local conn = RunService.RenderStepped:Connect(function()
-		if not Movement.Speed or not LocalPlayer.Character then return end
-		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		if hum then
-			hum.WalkSpeed = Movement.SpeedAmount
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function SetupNoclip()
+    if NoclipConnection then NoclipConnection:Disconnect() end
+
+    NoclipConnection = RunService.Stepped:Connect(function()
+        if not Movement.NoclipEnabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end)
+
+    table.insert(Connections, NoclipConnection)
 end
 
-function Movement:SetupNoClip()
-	local conn = RunService.Stepped:Connect(function()
-		if not Movement.NoClip or not LocalPlayer.Character then return end
-		for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-			if v:IsA("BasePart") then
-				v.CanCollide = false
-			end
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function CleanupNoclip()
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
+    end
 end
 
-function Movement:SetupInfiniteJump()
-	local conn = game:GetService("UserInputService").JumpRequest:Connect(function()
-		if Movement.InfiniteJump and LocalPlayer.Character then
-			local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-			if hum then
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function SetupSpeed()
+    if SpeedConnection then SpeedConnection:Disconnect() end
+
+    SpeedConnection = RunService.Stepped:Connect(function()
+        if not Movement.SpeedEnabled then return end
+        if not IsAlive() then return end
+
+        local char = LocalPlayer.Character
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+
+        if root and hum then
+            root.CFrame = root.CFrame + hum.MoveDirection * Movement.SpeedMultiplier * 0.1
+        end
+    end)
+
+    table.insert(Connections, SpeedConnection)
 end
 
-function Movement:SetupBunnyHop()
-	local hopping = false
-	local conn = RunService.Heartbeat:Connect(function()
-		if not Movement.BunnyHop or not LocalPlayer.Character then
-			hopping = false
-			return
-		end
-		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		if not hum then return end
-		if hum.FloorMaterial ~= Enum.Material.Air and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-			if not hopping then
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-				hopping = true
-			end
-		elseif hum.FloorMaterial == Enum.Material.Air then
-			hopping = false
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function CleanupSpeed()
+    if SpeedConnection then
+        SpeedConnection:Disconnect()
+        SpeedConnection = nil
+    end
 end
 
-function Movement:SetupDoubleTap()
-	local lastTap = 0
-	local tapCount = 0
-	local conn = UserInputService.InputBegan:Connect(function(input)
-		if not Movement.DoubleTap or not LocalPlayer.Character then return end
-		if input.KeyCode == Enum.KeyCode.W then
-			local now = tick()
-			if now - lastTap < 0.3 then
-				tapCount = tapCount + 1
-				if tapCount >= 2 then
-					local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-					if hum then hum.WalkSpeed = Movement.DoubleTapSpeed end
-					task.delay(2, function()
-						if hum then hum.WalkSpeed = 16 end
-					end)
-					tapCount = 0
-				end
-			else
-				tapCount = 1
-			end
-			lastTap = now
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function SetupFly()
+    if not IsAlive() then return end
+
+    local char = LocalPlayer.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+
+    FlyBodyVelocity = Instance.new("BodyVelocity")
+    FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    FlyBodyVelocity.Parent = root
+
+    FlyBodyGyro = Instance.new("BodyGyro")
+    FlyBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    FlyBodyGyro.P = 10000
+    FlyBodyGyro.D = 500
+    FlyBodyGyro.Parent = root
+
+    FlyConnection = RunService.RenderStepped:Connect(function()
+        if not FlyEnabled then return end
+        if not FlyBodyVelocity or not FlyBodyGyro then return end
+
+        local flyDir = Vector3.new(0, 0, 0)
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            flyDir = flyDir + Camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            flyDir = flyDir - Camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            flyDir = flyDir - Camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            flyDir = flyDir + Camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            flyDir = flyDir + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            flyDir = flyDir - Vector3.new(0, 1, 0)
+        end
+
+        if flyDir.Magnitude > 0 then
+            flyDir = flyDir.Unit * FlySpeed
+        end
+
+        FlyBodyVelocity.Velocity = flyDir
+        FlyBodyGyro.CFrame = Camera.CFrame
+    end)
+
+    table.insert(Connections, FlyConnection)
 end
 
-function Movement:SetupJumpPower()
-	local conn = RunService.RenderStepped:Connect(function()
-		if not Movement.JumpPower or not LocalPlayer.Character then return end
-		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		if hum then
-			hum.JumpPower = Movement.JumpPowerAmount
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function CleanupFly()
+    FlyEnabled = false
+    if FlyConnection then
+        FlyConnection:Disconnect()
+        FlyConnection = nil
+    end
+    if FlyBodyVelocity then
+        pcall(function() FlyBodyVelocity:Destroy() end)
+        FlyBodyVelocity = nil
+    end
+    if FlyBodyGyro then
+        pcall(function() FlyBodyGyro:Destroy() end)
+        FlyBodyGyro = nil
+    end
 end
 
-function Movement:SetupCFrameWalk()
-	local conn = RunService.RenderStepped:Connect(function()
-		if not Movement.CFrameWalk or not LocalPlayer.Character then return end
-		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-		if not hum or not root then return end
-		local moveDir = hum.MoveDirection
-		if moveDir.Magnitude > 0 then
-			local targetPos = root.Position + moveDir * Movement.CFrameWalkSpeed
-			root.CFrame = CFrame.new(targetPos, root.Position + moveDir)
-		end
-	end)
-	table.insert(Movement.Connections, conn)
+local function SetupCFrameWalk()
+    if CFrameWalkConnection then CFrameWalkConnection:Disconnect() end
+
+    CFrameWalkConnection = RunService.RenderStepped:Connect(function()
+        if not Movement.CFrameWalkEnabled then return end
+        if not IsAlive() then return end
+
+        local char = LocalPlayer.Character
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+
+        if root and hum then
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                root.CFrame = root.CFrame + moveDir * Movement.CFrameWalkSpeed
+            end
+        end
+    end)
+
+    table.insert(Connections, CFrameWalkConnection)
 end
 
-function Movement:BuildUI(Tab)
-	local MG = Tab:AddLeftGroupbox("Movement")
-	MG:AddToggle("Movement_Fly", { Text = "Fly", Default = false })
-	Toggles.Movement_Fly:OnChanged(function() Movement.Fly = Toggles.Movement_Fly.Value; Movement:SetupFly() end)
-	MG:AddSlider("Movement_FlySpeed", { Text = "Fly Speed", Default = 50, Min = 10, Max = 500, Rounding = 0 })
-	Options.Movement_FlySpeed:OnChanged(function() Movement.FlySpeed = Options.Movement_FlySpeed.Value end)
-	MG:AddToggle("Movement_Speed", { Text = "Speed", Default = false })
-	Toggles.Movement_Speed:OnChanged(function() Movement.Speed = Toggles.Movement_Speed.Value end)
-	MG:AddSlider("Movement_SpeedAmount", { Text = "Speed Amount", Default = 50, Min = 16, Max = 500, Rounding = 0 })
-	Options.Movement_SpeedAmount:OnChanged(function() Movement.SpeedAmount = Options.Movement_SpeedAmount.Value end)
-	MG:AddToggle("Movement_NoClip", { Text = "No Clip", Default = false })
-	Toggles.Movement_NoClip:OnChanged(function() Movement.NoClip = Toggles.Movement_NoClip.Value end)
-	MG:AddToggle("Movement_InfiniteJump", { Text = "Infinite Jump", Default = false })
-	Toggles.Movement_InfiniteJump:OnChanged(function() Movement.InfiniteJump = Toggles.Movement_InfiniteJump.Value end)
-	MG:AddToggle("Movement_BunnyHop", { Text = "Bunny Hop", Default = false })
-	Toggles.Movement_BunnyHop:OnChanged(function() Movement.BunnyHop = Toggles.Movement_BunnyHop.Value end)
-	MG:AddToggle("Movement_JumpPower", { Text = "Jump Power", Default = false })
-	Toggles.Movement_JumpPower:OnChanged(function() Movement.JumpPower = Toggles.Movement_JumpPower.Value end)
-	MG:AddSlider("Movement_JumpPowerAmount", { Text = "Jump Power", Default = 100, Min = 50, Max = 500, Rounding = 0 })
-	Options.Movement_JumpPowerAmount:OnChanged(function() Movement.JumpPowerAmount = Options.Movement_JumpPowerAmount.Value end)
-
-	local EG = Tab:AddRightGroupbox("Exploits")
-	EG:AddToggle("Movement_CFrameWalk", { Text = "CFrame Walk", Default = false })
-	Toggles.Movement_CFrameWalk:OnChanged(function() Movement.CFrameWalk = Toggles.Movement_CFrameWalk.Value end)
-	EG:AddSlider("Movement_CFrameWalkSpeed", { Text = "CFrame Speed", Default = 1.5, Min = 0.1, Max = 5, Rounding = 1 })
-	Options.Movement_CFrameWalkSpeed:OnChanged(function() Movement.CFrameWalkSpeed = Options.Movement_CFrameWalkSpeed.Value end)
-	EG:AddToggle("Movement_DoubleTap", { Text = "Double Tap Speed", Default = false })
-	Toggles.Movement_DoubleTap:OnChanged(function() Movement.DoubleTap = Toggles.Movement_DoubleTap.Value end)
-	EG:AddSlider("Movement_DoubleTapSpeed", { Text = "Tap Speed", Default = 100, Min = 50, Max = 500, Rounding = 0 })
-	Options.Movement_DoubleTapSpeed:OnChanged(function() Movement.DoubleTapSpeed = Options.Movement_DoubleTapSpeed.Value end)
+local function CleanupCFrameWalk()
+    if CFrameWalkConnection then
+        CFrameWalkConnection:Disconnect()
+        CFrameWalkConnection = nil
+    end
 end
 
 function Movement:Init()
-	self:SetupFly()
-	self:SetupSpeed()
-	self:SetupNoClip()
-	self:SetupInfiniteJump()
-	self:SetupBunnyHop()
-	self:SetupDoubleTap()
-	self:SetupJumpPower()
-	self:SetupCFrameWalk()
+    table.insert(Connections, UserInputService.JumpRequest:Connect(function()
+        if not Movement.InfiniteJumpEnabled then return end
+        if not IsAlive() then return end
+
+        local char = LocalPlayer.Character
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end))
+
+    local lastBhopTick = 0
+    table.insert(Connections, RunService.RenderStepped:Connect(function()
+        if not Movement.BhopEnabled then return end
+        if not IsAlive() then return end
+
+        local char = LocalPlayer.Character
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+
+        if hum.FloorMaterial ~= Enum.Material.Air then
+            local now = tick()
+            if now - lastBhopTick > 0.1 then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                lastBhopTick = now
+            end
+        end
+    end))
 end
 
 function Movement:Cleanup()
-	for _, v in ipairs(self.Connections) do
-		pcall(v.Disconnect, v)
-	end
-	self.Connections = {}
-	if self.BodyVelocity then self.BodyVelocity:Destroy(); self.BodyVelocity = nil end
-	if self.BodyGyro then self.BodyGyro:Destroy(); self.BodyGyro = nil end
-	if LocalPlayer.Character then
-		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-		if hum then
-			hum.WalkSpeed = 16
-			hum.JumpPower = 50
-			hum.PlatformStand = false
-		end
-		for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-			if v:IsA("BasePart") then
-				v.CanCollide = true
-			end
-		end
-	end
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    Connections = {}
+    CleanupNoclip()
+    CleanupSpeed()
+    CleanupFly()
+    CleanupCFrameWalk()
+end
+
+function Movement:BuildUI(Tabs)
+    local MovTab = Tabs
+
+    local MovementBox = MovTab:AddLeftGroupbox("Movement")
+
+    MovementBox:AddToggle("Mov_Noclip", {
+        Text = "Noclip",
+        Default = false,
+        Callback = function(value)
+            Movement.NoclipEnabled = value
+            if value then
+                SetupNoclip()
+            else
+                CleanupNoclip()
+            end
+        end
+    })
+
+    MovementBox:AddToggle("Mov_Speed", {
+        Text = "Speed",
+        Default = false,
+        Callback = function(value)
+            Movement.SpeedEnabled = value
+            if value then
+                SetupSpeed()
+            else
+                CleanupSpeed()
+            end
+        end
+    })
+
+    MovementBox:AddSlider("Mov_SpeedMult", {
+        Text = "Speed Multiplier",
+        Default = 16,
+        Min = 16,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(value)
+            Movement.SpeedMultiplier = value
+        end
+    })
+
+    MovementBox:AddToggle("Mov_Fly", {
+        Text = "Fly",
+        Default = false,
+        Callback = function(value)
+            Movement.FlyEnabled = value
+            FlyEnabled = value
+            if value then
+                SetupFly()
+            else
+                CleanupFly()
+            end
+        end
+    })
+
+    MovementBox:AddSlider("Mov_FlySpeed", {
+        Text = "Fly Speed",
+        Default = 50,
+        Min = 10,
+        Max = 200,
+        Rounding = 0,
+        Callback = function(value)
+            FlySpeed = value
+        end
+    })
+
+    MovementBox:AddToggle("Mov_CFrameWalk", {
+        Text = "CFrame Walk",
+        Default = false,
+        Callback = function(value)
+            Movement.CFrameWalkEnabled = value
+            if value then
+                SetupCFrameWalk()
+            else
+                CleanupCFrameWalk()
+            end
+        end
+    })
+
+    MovementBox:AddSlider("Mov_CFrameSpeed", {
+        Text = "CFrame Speed",
+        Default = 0.5,
+        Min = 0.1,
+        Max = 5,
+        Rounding = 1,
+        Callback = function(value)
+            Movement.CFrameWalkSpeed = value
+        end
+    })
+
+    local JumpBox = MovTab:AddRightGroupbox("Jump")
+
+    JumpBox:AddToggle("Mov_InfiniteJump", {
+        Text = "Infinite Jump",
+        Default = false,
+        Callback = function(value)
+            Movement.InfiniteJumpEnabled = value
+        end
+    })
+
+    JumpBox:AddToggle("Mov_Bhop", {
+        Text = "Bunny Hop",
+        Default = false,
+        Callback = function(value)
+            Movement.BhopEnabled = value
+        end
+    })
 end
 
 return Movement

@@ -1,307 +1,497 @@
+local Rage = {}
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 
-local Rage = {
-	Enabled = false,
-	AutoShoot = false,
-	RageMode = "Aim", -- Aim, Teleport, TPShoot
-	TargetPart = "Head",
-	HitChance = 75,
-	MaxDistance = 1000,
-	TeamCheck = true,
-	VisibleCheck = false,
-	AutoWall = false,
-	WallPenetration = 0,
-	Prediction = 0.175,
-	HitboxPriority = "LowestHP",
-	TargetSwitching = "Crosshair",
-	AntiAim = false,
-	AntiAimType = "Jitter",
-	AntiAimPitch = false,
-	AntiAimYaw = "Spin",
-	AntiAimFakeDesync = false,
-	FakeLag = false,
-	FakeLagAmount = 3,
-	FakeLagTick = 0,
-	HitSound = false,
-	HitSoundID = "rbxassetid://0",
-	Connections = {},
-	AttackRemote = nil,
-	LastTarget = nil,
-	Resolver = false,
-	BodyPartMultipliers = {
-		Head = 3.0,
-		Torso = 1.5,
-		HumanoidRootPart = 1.0,
-	},
-}
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local Connections = {}
+local AttackRemote = nil
+
+Rage.Enabled = false
+Rage.OrbitAura = false
+Rage.AntiAim = false
+Rage.AntiAimMode = "Spin"
+
+Rage.HitsPerFrame = 3
+Rage.OrbitRadius = 10
+Rage.EvadeDistance = 10000000
+Rage.TargetMode = "Closest"
+Rage.WeaponCycleMode = "Swap"
+Rage.WeaponOrder = {"Primary", "Secondary", "Melee"}
+Rage.CurrentWeaponIndex = 1
+Rage.ReloadEvadeEnabled = true
+Rage.FireDelay = 0
+
+Rage.AntiAimSpinSpeed = 10
+Rage.AntiAimJitterAngle = 30
+
+local SpinAngle = 0
+local IsEvaluating = false
+local OrbitActive = false
+local OriginalCameraCF = nil
 
 local function FindAttackRemote()
-	if Rage.AttackRemote then return Rage.AttackRemote end
-	local ok, remote = pcall(function()
-		return ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Attack")
-	end)
-	if ok and typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
-		Rage.AttackRemote = remote
-		return remote
-	end
-	for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-		if v:IsA("RemoteEvent") and v.Name:find("ttack") then
-			Rage.AttackRemote = v
-			return v
-		end
-	end
-	return nil
+    if AttackRemote then return AttackRemote end
+    local ok, result = pcall(function()
+        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
+        if remotes then
+            return remotes:WaitForChild("Attack", 5)
+        end
+    end)
+    if ok and result then
+        AttackRemote = result
+        return result
+    end
+    return nil
 end
 
-function Rage:GetPart(player)
-	local char = player.Character
-	if not char then return nil end
-	local hum = char:FindFirstChildWhichIsA("Humanoid")
-	if not hum or hum.Health <= 0 then return nil end
-	if Rage.TeamCheck and LocalPlayer.Team and player.Team == LocalPlayer.Team then return nil end
-	if Rage.TargetPart == "Random" then
-		local parts = { "Head", "Torso", "HumanoidRootPart" }
-		return char:FindFirstChild(parts[math.random(1, #parts)])
-	end
-	return char:FindFirstChild(Rage.TargetPart) or char:FindFirstChild("Head")
+local function IsAlive(player)
+    if not player or not player.Character then return false end
+    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    return humanoid and root and humanoid.Health > 0
 end
 
-function Rage:IsVisible(part)
-	if not Rage.VisibleCheck then return true end
-	if not part then return false end
-	local cam = Workspace.CurrentCamera
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Blacklist
-	params.FilterDescendantsInstances = { LocalPlayer.Character or {} }
-	local ray = Workspace:Raycast(cam.CFrame.Position, part.Position - cam.CFrame.Position, params)
-	if ray then
-		local m = ray.Instance:FindFirstAncestorWhichIsA("Model")
-		if m and m:FindFirstChildWhichIsA("Humanoid") then return true end
-		if Rage.AutoWall then
-			local remain = ray.Distance
-			local dir = (part.Position - cam.CFrame.Position).Unit
-			local hit = ray.Instance
-			if hit and hit:IsA("BasePart") then
-				local pen = Rage.WallPenetration
-				if hit.Transparency > 0.5 then pen = pen + 0.5 end
-				if hit.Material == Enum.Material.Glass then pen = pen + 0.3 end
-				return pen > 0.3
-			end
-		end
-		return false
-	end
-	return true
+local function GetBestTarget()
+    local best = nil
+    local bestScore = math.huge
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if not IsAlive(player) then continue end
+        if not player.Character:FindFirstChild("HumanoidRootPart") then continue end
+
+        local root = player.Character.HumanoidRootPart
+        local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not myRoot then continue end
+
+        local dist = (myRoot.Position - root.Position).Magnitude
+        local score = math.huge
+
+        if Rage.TargetMode == "Closest" then
+            score = dist
+        elseif Rage.TargetMode == "LowestHP" then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            score = hum and hum.Health or math.huge
+        elseif Rage.TargetMode == "Crosshair" then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+            if onScreen then
+                local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                score = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+            end
+        end
+
+        if score < bestScore and dist < 500 then
+            bestScore = score
+            best = player
+        end
+    end
+
+    return best
 end
 
-function Rage:GetBodyPartMultiplier(partName)
-	return Rage.BodyPartMultipliers[partName] or 1.0
+local function GetSpherePosition(center, radius)
+    local theta = math.random() * math.pi * 2
+    local phi = math.random() * math.pi
+    local r = radius
+    return center + Vector3.new(
+        r * math.sin(phi) * math.cos(theta),
+        r * math.sin(phi) * math.sin(theta),
+        r * math.cos(phi)
+    )
 end
 
-function Rage:SelectTarget()
-	local candidates = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p == LocalPlayer then continue end
-		local part = self:GetPart(p)
-		if not part then continue end
-		local char = p.Character
-		local hum = char and char:FindFirstChildWhichIsA("Humanoid")
-		if not hum then continue end
-		local dist = LocalPlayer.Character and LocalPlayer.Character.PrimaryPart and
-			(LocalPlayer.Character.PrimaryPart.Position - part.Position).Magnitude or math.huge
-		if dist > Rage.MaxDistance then continue end
-		if not self:IsVisible(part) and not Rage.AutoWall then continue end
-		local sp, os = Workspace.CurrentCamera:WorldToViewportPoint(part.Position)
-		if not os then continue end
-		table.insert(candidates, { player = p, part = part, distance = dist, health = hum.Health, screenDist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(sp.X, sp.Y)).Magnitude })
-	end
-	if #candidates == 0 then return nil, nil end
-	if Rage.HitboxPriority == "LowestHP" then
-		table.sort(candidates, function(a, b) return a.health < b.health end)
-	elseif Rage.HitboxPriority == "Closest" then
-		table.sort(candidates, function(a, b) return a.distance < b.distance end)
-	elseif Rage.HitboxPriority == "Crosshair" then
-		table.sort(candidates, function(a, b) return a.screenDist < b.screenDist end)
-	end
-	local picked = candidates[1]
-	local chance = math.random(1, 100)
-	local hc = Rage.HitChance
-	local mult = self:GetBodyPartMultiplier(picked.part.Name)
-	hc = hc * (mult / 1.5)
-	if chance > hc then return nil, nil end
-	return picked.player, picked.part
+local function DetectWeapons()
+    local weapons = {Primary = nil, Secondary = nil, Melee = nil}
+    local char = LocalPlayer.Character
+    if not char then return weapons end
+
+    local tools = {}
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            table.insert(tools, tool)
+        end
+    end
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            table.insert(tools, tool)
+        end
+    end
+
+    for _, tool in ipairs(tools) do
+        local name = tool.Name:lower()
+        if not weapons.Primary and (name:find("rifle") or name:find("ak") or name:find("m4") or name:find("ar") or name:find("sniper") or name:find("shotgun") or name:find("smg")) then
+            weapons.Primary = tool
+        elseif not weapons.Secondary and (name:find("pistol") or name:find("deagle") or name:find("glock") or name:find("revolver") or name:find("hand")) then
+            weapons.Secondary = tool
+        elseif not weapons.Melee and (name:find("knife") or name:find("bat") or name:find("melee") or name:find("sword")) then
+            weapons.Melee = tool
+        end
+    end
+
+    if not weapons.Primary and not weapons.Secondary and not weapons.Melee then
+        if #tools >= 3 then
+            weapons.Primary = tools[1]
+            weapons.Secondary = tools[2]
+            weapons.Melee = tools[3]
+        elseif #tools == 2 then
+            weapons.Primary = tools[1]
+            weapons.Secondary = tools[2]
+        elseif #tools == 1 then
+            weapons.Primary = tools[1]
+        end
+    end
+
+    return weapons
 end
 
-function Rage:TeleportToTarget(targetPart)
-	local char = LocalPlayer.Character
-	if not char then return end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	local targetPos = targetPart.Position + Vector3.new(0, 3, 0)
-	local lookAt = CFrame.lookAt(targetPos, targetPart.Position)
-	root.CFrame = lookAt
+local function EquipWeapon(tool)
+    if not tool or not tool.Parent then return false end
+    local char = LocalPlayer.Character
+    if not char then return false end
+
+    if tool.Parent == char then return true end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        pcall(function() humanoid:EquipTool(tool) end)
+        task.wait(0.05)
+        return tool.Parent == char
+    end
+    return false
 end
 
-function Rage:FireAt(part)
-	local remote = FindAttackRemote()
-	if remote then
-		pcall(remote.FireServer, remote, part)
-		return
-	end
-	Mouse1Click()
+local function FireAttack(enemyRoot)
+    local remote = FindAttackRemote()
+    if remote then
+        pcall(function() remote:FireServer(enemyRoot) end)
+        return true
+    end
+    return false
 end
 
-function Rage:DoAntiAim()
-	if not Rage.AntiAim then return end
-	local char = LocalPlayer.Character
-	if not char then return end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	local yaw = 0
-	if Rage.AntiAimYaw == "Spin" then
-		yaw = (tick() * 15) % 360
-	elseif Rage.AntiAimYaw == "Jitter" then
-		yaw = math.random(-60, 60)
-	elseif Rage.AntiAimYaw == "Back" then
-		yaw = 180
-	elseif Rage.AntiAimYaw == "Left" then
-		yaw = 90
-	elseif Rage.AntiAimYaw == "Right" then
-		yaw = -90
-	elseif Rage.AntiAimYaw == "Desync" then
-		yaw = 0
-	end
-	local pitch = 0
-	if Rage.AntiAimPitch then
-		pitch = math.random(-80, 80)
-	end
-	root.CFrame = CFrame.new(root.Position) * CFrame.Angles(math.rad(pitch), math.rad(yaw), 0)
+local function EvadeFromTarget(enemyRoot)
+    if not enemyRoot then return end
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    local randomDir = Vector3.new(
+        math.random() * 2 - 1,
+        math.random() * 2 - 1,
+        math.random() * 2 - 1
+    ).Unit * Rage.EvadeDistance
+
+    myRoot.CFrame = CFrame.new(randomDir)
 end
 
-function Rage:DoFakeLag()
-	if not Rage.FakeLag then return end
-	Rage.FakeLagTick = Rage.FakeLagTick + 1
-	if Rage.FakeLagTick >= Rage.FakeLagAmount then
-		Rage.FakeLagTick = 0
-		return
-	end
-	task.wait(0.1)
+local function OrbitAndShoot(target)
+    if not target or not target.Character then return end
+    local enemyRoot = target.Character:FindFirstChild("HumanoidRootPart")
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not enemyRoot or not myRoot then return end
+
+    local savedCFrame = myRoot.CFrame
+
+    local weapons = DetectWeapons()
+    local weaponOrder = {}
+
+    for _, slotName in ipairs(Rage.WeaponOrder) do
+        if weapons[slotName] then
+            table.insert(weaponOrder, weapons[slotName])
+        end
+    end
+
+    if #weaponOrder == 0 then
+        for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                table.insert(weaponOrder, tool)
+            end
+        end
+        for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do
+            if tool:IsA("Tool") then
+                table.insert(weaponOrder, tool)
+            end
+        end
+    end
+
+    if #weaponOrder == 0 then return end
+
+    for weaponIdx, weapon in ipairs(weaponOrder) do
+        EquipWeapon(weapon)
+        task.wait(0.02)
+
+        for i = 1, Rage.HitsPerFrame do
+            if not IsAlive(target) then break end
+
+            local spherePos = GetSpherePosition(enemyRoot.Position, Rage.OrbitRadius)
+            myRoot.CFrame = CFrame.new(spherePos, enemyRoot.Position)
+
+            FireAttack(enemyRoot)
+
+            if Rage.FireDelay > 0 then
+                task.wait(Rage.FireDelay)
+            end
+        end
+
+        if not IsAlive(target) then break end
+
+        if Rage.WeaponCycleMode == "Reload" then
+            if Rage.ReloadEvadeEnabled then
+                for evadeCount = 1, 30 do
+                    if not IsAlive(target) then break end
+                    EvadeFromTarget(enemyRoot)
+                    task.wait()
+                end
+
+                local maxWait = 0
+                while maxWait < 300 do
+                    if not IsAlive(target) then break end
+                    EvadeFromTarget(enemyRoot)
+                    task.wait(0.1)
+                    maxWait = maxWait + 1
+
+                    local equipped = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                    if equipped and equipped == weapon then
+                        local ammo = equipped:FindFirstChild("Ammo") or equipped:FindFirstChild("ClipSize")
+                        if ammo and ammo.Value > 0 then
+                            break
+                        end
+                    end
+                end
+            else
+                for _ = 1, 100 do
+                    task.wait(0.01)
+                end
+            end
+        elseif Rage.WeaponCycleMode == "Swap" then
+            local nextIdx = weaponIdx + 1
+            if nextIdx > #weaponOrder then
+                nextIdx = 1
+            end
+            if weaponOrder[nextIdx] then
+                EquipWeapon(weaponOrder[nextIdx])
+                task.wait(0.05)
+            end
+        end
+    end
+
+    myRoot.CFrame = savedCFrame
 end
 
-function Rage:SetupRagebot()
-	local lastFire = 0
-	local conn = RunService.Heartbeat:Connect(function()
-		if not Rage.Enabled then
-			Rage.LastTarget = nil
-			return
-		end
-		Rage:DoFakeLag()
-		Rage:DoAntiAim()
-		local player, part = Rage:SelectTarget()
-		if not player or not part then
-			Rage.LastTarget = nil
-			return
-		end
-		Rage.LastTarget = player
-		if Rage.RageMode == "Teleport" or Rage.RageMode == "TPShoot" then
-			Rage:TeleportToTarget(part)
-		end
-		if Rage.AutoShoot and (Rage.RageMode == "Aim" or Rage.RageMode == "TPShoot") then
-			local now = tick()
-			if now - lastFire >= 0.05 then
-				Rage:FireAt(part)
-				lastFire = now
-			end
-		end
-	end)
-	table.insert(Rage.Connections, conn)
-end
+local function DoAntiAim()
+    if not Rage.AntiAimEnabled then return end
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
 
-function Rage:SetupHitSound()
-	if Rage.HitSoundConn then Rage.HitSoundConn:Disconnect() end
-	Rage.HitSoundConn = (LocalPlayer.Character or game:GetService("Players").LocalPlayer.CharacterAdded:Wait()):WaitForChild("Humanoid").HealthChanged:Connect(function(hp)
-		if not Rage.HitSound or not Rage.LastTarget then return end
-		local char = Rage.LastTarget.Character
-		if not char then return end
-		local hum = char:FindFirstChildWhichIsA("Humanoid")
-		if hum and hum.Health < hp then
-			local s = Instance.new("Sound")
-			s.SoundId = Rage.HitSoundID
-			s.Volume = 1
-			s.Parent = Workspace.CurrentCamera
-			s:Play()
-			game:GetService("Debris"):AddItem(s, 1)
-		end
-	end)
-end
+    local currentCF = myRoot.CFrame
 
-function Rage:BuildUI(Tab)
-	local RG = Tab:AddLeftGroupbox("Ragebot")
-	RG:AddToggle("Ragebot", { Text = "Ragebot", Default = false })
-	Toggles.Ragebot:OnChanged(function() Rage.Enabled = Toggles.Ragebot.Value end)
-	RG:AddDropdown("Ragebot_Mode", { Text = "Rage Mode", Default = 1, Values = { "Aim", "Teleport", "TPShoot" } })
-	Options.Ragebot_Mode:OnChanged(function() Rage.RageMode = Options.Ragebot_Mode.Value end)
-	RG:AddToggle("Ragebot_AutoShoot", { Text = "Auto Shoot", Default = true })
-	Toggles.Ragebot_AutoShoot:OnChanged(function() Rage.AutoShoot = Toggles.Ragebot_AutoShoot.Value end)
-	RG:AddDropdown("Ragebot_Hitbox", { Text = "Hitbox Priority", Default = 1, Values = { "Head", "Torso", "HumanoidRootPart", "Random" } })
-	Options.Ragebot_Hitbox:OnChanged(function()
-		local v = Options.Ragebot_Hitbox.Value
-		Rage.TargetPart = v == "Random" and ({ "Head", "Torso", "HumanoidRootPart" })[math.random(1, 3)] or v
-	end)
-	RG:AddSlider("Ragebot_HitChance", { Text = "Min Hit Chance", Default = 75, Min = 0, Max = 100, Rounding = 0, Suffix = "%" })
-	Options.Ragebot_HitChance:OnChanged(function() Rage.HitChance = Options.Ragebot_HitChance.Value end)
-	RG:AddSlider("Ragebot_MaxDistance", { Text = "Max Distance", Default = 1000, Min = 50, Max = 5000, Rounding = 0, Suffix = " studs" })
-	Options.Ragebot_MaxDistance:OnChanged(function() Rage.MaxDistance = Options.Ragebot_MaxDistance.Value end)
-	RG:AddSlider("Ragebot_Prediction", { Text = "Prediction", Default = 0.175, Min = 0, Max = 0.5, Rounding = 3, Suffix = "s" })
-	Options.Ragebot_Prediction:OnChanged(function() Rage.Prediction = Options.Ragebot_Prediction.Value end)
-	RG:AddDropdown("Ragebot_Priority", { Text = "Target Selection", Default = 1, Values = { "LowestHP", "Closest", "Crosshair" } })
-	Options.Ragebot_Priority:OnChanged(function() Rage.HitboxPriority = Options.Ragebot_Priority.Value end)
-	RG:AddLabel("Key"):AddKeyPicker("Ragebot_Key", { Default = "Q", Mode = "Toggle", Text = "Rage Key" })
-
-	local AG = Tab:AddRightGroupbox("Anti-Aim")
-	AG:AddToggle("Ragebot_AntiAim", { Text = "Anti-Aim", Default = false })
-	Toggles.Ragebot_AntiAim:OnChanged(function() Rage.AntiAim = Toggles.Ragebot_AntiAim.Value end)
-	AG:AddDropdown("Ragebot_AntiAimYaw", { Text = "Yaw", Default = 1, Values = { "Spin", "Jitter", "Back", "Left", "Right", "Desync" } })
-	Options.Ragebot_AntiAimYaw:OnChanged(function() Rage.AntiAimYaw = Options.Ragebot_AntiAimYaw.Value end)
-	AG:AddToggle("Ragebot_AntiAimPitch", { Text = "Pitch", Default = false })
-	Toggles.Ragebot_AntiAimPitch:OnChanged(function() Rage.AntiAimPitch = Toggles.Ragebot_AntiAimPitch.Value end)
-	AG:AddDivider()
-
-	local Misc = Tab:AddLeftGroupbox("Misc")
-	Misc:AddToggle("Ragebot_TeamCheck", { Text = "Team Check", Default = true })
-	Toggles.Ragebot_TeamCheck:OnChanged(function() Rage.TeamCheck = Toggles.Ragebot_TeamCheck.Value end)
-	Misc:AddToggle("Ragebot_AutoWall", { Text = "Auto Wallbang", Default = false })
-	Toggles.Ragebot_AutoWall:OnChanged(function() Rage.AutoWall = Toggles.Ragebot_AutoWall.Value end)
-	Misc:AddSlider("Ragebot_WallPen", { Text = "Wall Penetration", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%" })
-	Options.Ragebot_WallPen:OnChanged(function() Rage.WallPenetration = Options.Ragebot_WallPen.Value / 100 end)
-	Misc:AddToggle("Ragebot_VisibleCheck", { Text = "Visible Check", Default = false })
-	Toggles.Ragebot_VisibleCheck:OnChanged(function() Rage.VisibleCheck = Toggles.Ragebot_VisibleCheck.Value end)
-
-	local Evade = Tab:AddRightGroupbox("Evasion")
-	Evade:AddToggle("Ragebot_FakeLag", { Text = "Fake Lag", Default = false })
-	Toggles.Ragebot_FakeLag:OnChanged(function() Rage.FakeLag = Toggles.Ragebot_FakeLag.Value end)
-	Evade:AddSlider("Ragebot_FakeLagAmount", { Text = "Lag Amount", Default = 3, Min = 1, Max = 10, Rounding = 0 })
-	Options.Ragebot_FakeLagAmount:OnChanged(function() Rage.FakeLagAmount = Options.Ragebot_FakeLagAmount.Value end)
-	Evade:AddToggle("Ragebot_HitSound", { Text = "Hit Sound", Default = false })
-	Toggles.Ragebot_HitSound:OnChanged(function() Rage.HitSound = Toggles.Ragebot_HitSound.Value end)
-	Evade:AddInput("Ragebot_HitSoundID", { Text = "Sound ID", Default = "rbxassetid://0" })
-	Options.Ragebot_HitSoundID:OnChanged(function() Rage.HitSoundID = Options.Ragebot_HitSoundID.Value end)
+    if Rage.AntiAimMode == "Spin" then
+        SpinAngle = SpinAngle + Rage.AntiAimSpinSpeed
+        if SpinAngle > 360 then SpinAngle = SpinAngle - 360 end
+        myRoot.CFrame = CFrame.new(currentCF.Position) * CFrame.Angles(0, math.rad(SpinAngle), 0)
+    elseif Rage.AntiAimMode == "Jitter" then
+        local jitter = math.random(-Rage.AntiAimJitterAngle, Rage.AntiAimJitterAngle)
+        myRoot.CFrame = CFrame.new(currentCF.Position) * CFrame.Angles(0, math.rad(jitter), 0)
+    elseif Rage.AntiAimMode == "Back" then
+        local lookVec = Camera.CFrame.LookVector
+        myRoot.CFrame = CFrame.new(currentCF.Position, currentCF.Position - lookVec)
+    end
 end
 
 function Rage:Init()
-	self:SetupRagebot()
-	self:SetupHitSound()
+    table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if Rage.Enabled and Rage.OrbitAura then
+            if IsEvaluating then return end
+            IsEvaluating = true
+
+            local target = GetBestTarget()
+            if target then
+                OrbitAndShoot(target)
+            end
+
+            IsEvaluating = false
+        end
+
+        if Rage.AntiAimEnabled then
+            DoAntiAim()
+        end
+    end))
 end
 
 function Rage:Cleanup()
-	if Rage.HitSoundConn then Rage.HitSoundConn:Disconnect() end
-	for _, c in ipairs(self.Connections) do c:Disconnect() end
-	self.Connections = {}
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    Connections = {}
+    IsEvaluating = false
+    OrbitActive = false
+end
+
+function Rage:BuildUI(Tabs)
+    local RageTab = Tabs
+
+    local OrbitBox = RageTab:AddLeftGroupbox("Orbit Aura")
+
+    OrbitBox:AddToggle("Rage_Enabled", {
+        Text = "Enable Rage",
+        Default = false,
+        Callback = function(value)
+            Rage.Enabled = value
+        end
+    })
+
+    OrbitBox:AddToggle("Rage_OrbitAura", {
+        Text = "Orbit Aura",
+        Default = false,
+        Callback = function(value)
+            Rage.OrbitAura = value
+        end
+    })
+
+    OrbitBox:AddSlider("Rage_HitsPerFrame", {
+        Text = "Hits Per Frame",
+        Default = 3,
+        Min = 1,
+        Max = 10,
+        Rounding = 0,
+        Callback = function(value)
+            Rage.HitsPerFrame = value
+        end
+    })
+
+    OrbitBox:AddSlider("Rage_OrbitRadius", {
+        Text = "Orbit Radius",
+        Default = 10,
+        Min = 3,
+        Max = 50,
+        Rounding = 0,
+        Callback = function(value)
+            Rage.OrbitRadius = value
+        end
+    })
+
+    OrbitBox:AddSlider("Rage_EvadeDistance", {
+        Text = "Evade Distance",
+        Default = 10000000,
+        Min = 1000000,
+        Max = 100000000,
+        Rounding = 0,
+        Callback = function(value)
+            Rage.EvadeDistance = value
+        end
+    })
+
+    OrbitBox:AddSlider("Rage_FireDelay", {
+        Text = "Fire Delay",
+        Default = 0,
+        Min = 0,
+        Max = 0.1,
+        Rounding = 3,
+        Callback = function(value)
+            Rage.FireDelay = value
+        end
+    })
+
+    local TargetBox = RageTab:AddRightGroupbox("Targeting")
+
+    TargetBox:AddDropdown("Rage_TargetMode", {
+        Text = "Target Mode",
+        Values = {"Closest", "Crosshair", "LowestHP"},
+        Default = 1,
+        Callback = function(value)
+            Rage.TargetMode = value
+        end
+    })
+
+    TargetBox:AddDropdown("Rage_WeaponCycleMode", {
+        Text = "Weapon Mode",
+        Values = {"Swap", "Reload"},
+        Default = 1,
+        Callback = function(value)
+            Rage.WeaponCycleMode = value
+        end
+    })
+
+    TargetBox:AddToggle("Rage_ReloadEvade", {
+        Text = "Evade During Reload",
+        Default = true,
+        Callback = function(value)
+            Rage.ReloadEvadeEnabled = value
+        end
+    })
+
+    TargetBox:AddDropdown("Rage_WeaponOrder1", {
+        Text = "Slot 1",
+        Values = {"Primary", "Secondary", "Melee"},
+        Default = 1,
+        Callback = function(value)
+            Rage.WeaponOrder[1] = value
+        end
+    })
+
+    TargetBox:AddDropdown("Rage_WeaponOrder2", {
+        Text = "Slot 2",
+        Values = {"Primary", "Secondary", "Melee"},
+        Default = 2,
+        Callback = function(value)
+            Rage.WeaponOrder[2] = value
+        end
+    })
+
+    TargetBox:AddDropdown("Rage_WeaponOrder3", {
+        Text = "Slot 3",
+        Values = {"Primary", "Secondary", "Melee"},
+        Default = 3,
+        Callback = function(value)
+            Rage.WeaponOrder[3] = value
+        end
+    })
+
+    local AntiAimBox = RageTab:AddLeftGroupbox("Anti-Aim")
+
+    AntiAimBox:AddToggle("Rage_AntiAim", {
+        Text = "Anti-Aim",
+        Default = false,
+        Callback = function(value)
+            Rage.AntiAimEnabled = value
+        end
+    })
+
+    AntiAimBox:AddDropdown("Rage_AntiAimMode", {
+        Text = "Mode",
+        Values = {"Spin", "Jitter", "Back"},
+        Default = 1,
+        Callback = function(value)
+            Rage.AntiAimMode = value
+        end
+    })
+
+    AntiAimBox:AddSlider("Rage_SpinSpeed", {
+        Text = "Spin Speed",
+        Default = 10,
+        Min = 1,
+        Max = 50,
+        Rounding = 0,
+        Callback = function(value)
+            Rage.AntiAimSpinSpeed = value
+        end
+    })
+
+    AntiAimBox:AddSlider("Rage_JitterAngle", {
+        Text = "Jitter Angle",
+        Default = 30,
+        Min = 5,
+        Max = 180,
+        Rounding = 0,
+        Callback = function(value)
+            Rage.AntiAimJitterAngle = value
+        end
+    })
 end
 
 return Rage

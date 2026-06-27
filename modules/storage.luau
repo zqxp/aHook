@@ -1,83 +1,91 @@
+local Storage = {}
+
 local HttpService = game:GetService("HttpService")
 
-local Storage = {
-	SaveFolder = "aHookSettings",
-	SkinLoadouts = {},
-	AutoloadSkin = nil,
-}
+Storage.SaveFolder = "aHookSettings"
+Storage.SkinLoadouts = {}
+Storage.AutoloadSkin = nil
 
-function Storage:GetPath()
-	return self.SaveFolder
+local function EnsureFolder()
+    pcall(function()
+        if not isfolder(Storage.SaveFolder) then
+            makefolder(Storage.SaveFolder)
+        end
+    end)
 end
 
-function Storage:Load()
-	local ok, data = pcall(function()
-		return readfile(self.SaveFolder .. "/skins.json")
-	end)
-	if ok and data then
-		local decoded = HttpService:JSONDecode(data)
-		if type(decoded) == "table" then
-			self.SkinLoadouts = decoded
-		end
-	end
+function Storage:Init()
+    EnsureFolder()
+    self:Load()
 end
 
 function Storage:Save()
-	local ok, err = pcall(function()
-		writefile(self.SaveFolder .. "/skins.json", HttpService:JSONEncode(self.SkinLoadouts))
-	end)
-	return ok, err
+    EnsureFolder()
+    local data = {
+        SkinLoadouts = self.SkinLoadouts,
+        AutoloadSkin = self.AutoloadSkin,
+    }
+    local json = HttpService:JSONEncode(data)
+    pcall(function() writefile(Storage.SaveFolder .. "/skins.json", json) end)
+end
+
+function Storage:Load()
+    EnsureFolder()
+    local ok, content = pcall(function()
+        return readfile(Storage.SaveFolder .. "/skins.json")
+    end)
+    if ok and content and type(content) == "string" and #content > 2 then
+        local data = HttpService:JSONDecode(content)
+        if data then
+            self.SkinLoadouts = data.SkinLoadouts or {}
+            self.AutoloadSkin = data.AutoloadSkin or nil
+        end
+    end
 end
 
 function Storage:SaveSkinLoadout(name, data)
-	self.SkinLoadouts[name] = data
-	return self:Save()
+    if not name or name == "" then return false, "Empty name" end
+    self.SkinLoadouts[name] = data
+    self:Save()
+    return true
 end
 
 function Storage:LoadSkinLoadout(name)
-	local data = self.SkinLoadouts[name]
-	if data then
-		return true, data
-	end
-	return false, nil
-end
-
-function Storage:ListSkinLoadouts()
-	local list = {}
-	for name in pairs(self.SkinLoadouts) do
-		table.insert(list, name)
-	end
-	table.sort(list)
-	return list
+    local data = self.SkinLoadouts[name]
+    if data then
+        return true, data
+    end
+    return false, nil
 end
 
 function Storage:DeleteSkinLoadout(name)
-	self.SkinLoadouts[name] = nil
-	self:Save()
+    self.SkinLoadouts[name] = nil
+    self:Save()
+end
+
+function Storage:ListSkinLoadouts()
+    local list = {}
+    for name, _ in pairs(self.SkinLoadouts) do
+        table.insert(list, name)
+    end
+    return list
 end
 
 function Storage:SetSkinAutoload(name)
-	self.AutoloadSkin = name
-	local ok, err = pcall(function()
-		writefile(self.SaveFolder .. "/autoload.txt", name)
-	end)
-	return ok, err
+    self.AutoloadSkin = name
+    self:Save()
 end
 
 function Storage:LoadAutoloadSkin()
-	if self.AutoloadSkin then
-		return self:LoadSkinLoadout(self.AutoloadSkin)
-	end
-	local ok, name = pcall(function()
-		return readfile(self.SaveFolder .. "/autoload.txt")
-	end)
-	if ok and name and name ~= "" then
-		self.AutoloadSkin = name
-		return self:LoadSkinLoadout(name)
-	end
-	return false, nil
+    if self.AutoloadSkin then
+        local ok, data = self:LoadSkinLoadout(self.AutoloadSkin)
+        if ok and data then
+            return true, data
+        end
+    end
+    return false, nil
 end
 
-Storage:Load()
+Storage:Init()
 
 return Storage

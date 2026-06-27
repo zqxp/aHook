@@ -1,137 +1,140 @@
+local SkinChanger = {}
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
+
 local LocalPlayer = Players.LocalPlayer
 
-local SkinChanger = {
-	Enabled = false,
-	CurrentWeapon = nil,
-	CurrentSkin = nil,
-	Skins = {},
-	WeaponSkins = {},
-	MaterialOptions = { "Plastic", "Metal", "Neon", "Ice", "Glow" },
-	CurrentMaterial = "Plastic",
-	CustomColor = Color3.fromRGB(255, 255, 255),
-	CustomTransparency = 0,
-	ApplyToAll = false,
-	AutoApply = false,
-	Connections = {},
-}
+local Connections = {}
+local WatcherConnection = nil
 
-local function GetWeaponModel(weapon)
-	if not weapon then return nil end
-	local handle = weapon:FindFirstChild("Handle")
-	if handle then return handle end
-	for _, v in ipairs(weapon:GetDescendants()) do
-		if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
-			return v
-		end
-	end
-	return weapon.PrimaryPart
-end
+SkinChanger.Enabled = false
+SkinChanger.CurrentWeapon = nil
+SkinChanger.CurrentSkin = nil
+SkinChanger.Material = "Plastic"
+SkinChanger.Color = Color3.fromRGB(255, 0, 0)
+SkinChanger.Transparency = 0
+SkinChanger.ApplyToAllParts = false
 
 local MaterialMap = {
-	Plastic = Enum.Material.Plastic,
-	Metal = Enum.Material.Metal,
-	Neon = Enum.Material.Neon,
-	Ice = Enum.Material.Ice,
-	Glow = Enum.Material.ForceField,
+    Plastic = Enum.Material.Plastic,
+    Metal = Enum.Material.Metal,
+    Neon = Enum.Material.Neon,
+    Ice = Enum.Material.Ice,
+    Glow = Enum.Material.ForceField,
 }
 
-function SkinChanger:GetWeapon()
-	local char = LocalPlayer.Character
-	if not char then return nil end
-	local tool = char:FindFirstChildOfClass("Tool")
-	if tool then
-		self.CurrentWeapon = tool
-		return tool
-	end
-	for _, v in ipairs(char:GetChildren()) do
-		if v:IsA("Tool") then
-			self.CurrentWeapon = v
-			return v
-		end
-	end
-	return nil
+local function GetWeapon()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then return tool end
+    return nil
 end
 
-function SkinChanger:ApplySkin(weapon, skinData)
-	if not weapon then weapon = self:GetWeapon() end
-	if not weapon then return end
-	local model = GetWeaponModel(weapon)
-	if not model then return end
+local function ApplySkin()
+    if not SkinChanger.Enabled then return end
 
-	local color = skinData and skinData.Color or self.CustomColor
-	local material = skinData and skinData.Material or self.CurrentMaterial
-	local transparency = skinData and skinData.Transparency or self.CustomTransparency
+    local weapon = GetWeapon()
+    if not weapon then return end
 
-	model.Color = color
-	model.Material = MaterialMap[material] or Enum.Material.Plastic
-	model.Transparency = transparency
-	model.Reflectance = material == "Metal" and 0.5 or 0
+    local mat = MaterialMap[SkinChanger.Material] or Enum.Material.Plastic
 
-	for _, v in ipairs(weapon:GetDescendants()) do
-		if v:IsA("BasePart") and v ~= model then
-			v.Color = color
-			if material == "Neon" or material == "Ice" or material == "Glow" then
-				v.Material = MaterialMap[material]
-			end
-			if self.ApplyToAll then
-				v.Transparency = transparency
-			end
-		end
-		if v:IsA("Decal") or v:IsA("Texture") then
-			v.Transparency = math.min(1, transparency + 0.5)
-		end
-	end
+    local parts = weapon:GetDescendants()
+    if not SkinChanger.ApplyToAllParts then
+        parts = weapon:GetChildren()
+    end
 
-	self.CurrentSkin = self.CurrentWeapon and self.CurrentWeapon.Name
-end
-
-function SkinChanger:SetupWatcher()
-	local conn = RunService.RenderStepped:Connect(function()
-		if not SkinChanger.Enabled then return end
-		local weapon = SkinChanger:GetWeapon()
-		if weapon and weapon ~= SkinChanger.CurrentWeapon then
-			SkinChanger.CurrentWeapon = weapon
-			if SkinChanger.AutoApply then
-				SkinChanger:ApplySkin(weapon)
-			end
-		end
-		if weapon and SkinChanger.AutoApply then
-			SkinChanger:ApplySkin(weapon)
-		end
-	end)
-	table.insert(SkinChanger.Connections, conn)
-end
-
-function SkinChanger:BuildUI(Tab)
-	local SG = Tab:AddLeftGroupbox("Skin Changer")
-	SG:AddToggle("SkinChanger_Enabled", { Text = "Skin Changer", Default = false })
-	Toggles.SkinChanger_Enabled:OnChanged(function() SkinChanger.Enabled = Toggles.SkinChanger_Enabled.Value end)
-	SG:AddToggle("SkinChanger_AutoApply", { Text = "Auto Apply", Default = false })
-	Toggles.SkinChanger_AutoApply:OnChanged(function() SkinChanger.AutoApply = Toggles.SkinChanger_AutoApply.Value end)
-	SG:AddToggle("SkinChanger_ApplyAll", { Text = "Apply To All Parts", Default = false })
-	Toggles.SkinChanger_ApplyAll:OnChanged(function() SkinChanger.ApplyToAll = Toggles.SkinChanger_ApplyAll.Value end)
-	SG:AddLabel("Color"):AddColorPicker("SkinChanger_Color", { Default = SkinChanger.CustomColor })
-	Options.SkinChanger_Color:OnChanged(function() SkinChanger.CustomColor = Options.SkinChanger_Color.Value end)
-	SG:AddDropdown("SkinChanger_Material", { Text = "Material", Default = 1, Values = SkinChanger.MaterialOptions })
-	Options.SkinChanger_Material:OnChanged(function() SkinChanger.CurrentMaterial = Options.SkinChanger_Material.Value end)
-	SG:AddSlider("SkinChanger_Transparency", { Text = "Transparency", Default = 0, Min = 0, Max = 1, Rounding = 2 })
-	Options.SkinChanger_Transparency:OnChanged(function() SkinChanger.CustomTransparency = Options.SkinChanger_Transparency.Value end)
-	SG:AddButton("Apply Now", function()
-		SkinChanger:ApplySkin()
-	end)
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart") then
+            pcall(function()
+                part.Color = SkinChanger.Color
+                part.Material = mat
+                part.Transparency = SkinChanger.Transparency
+            end)
+        end
+    end
 end
 
 function SkinChanger:Init()
-	self:SetupWatcher()
+    table.insert(Connections, RunService.RenderStepped:Connect(function()
+        if not SkinChanger.Enabled then return end
+        local weapon = GetWeapon()
+        if weapon and weapon ~= SkinChanger.CurrentWeapon then
+            SkinChanger.CurrentWeapon = weapon
+            SkinChanger.CurrentSkin = weapon.Name
+            task.defer(ApplySkin)
+        end
+    end))
 end
 
 function SkinChanger:Cleanup()
-	for _, c in ipairs(self.Connections) do c:Disconnect() end
-	self.Connections = {}
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    Connections = {}
+end
+
+function SkinChanger:ApplySkin(weaponName, skinName)
+    SkinChanger.CurrentWeapon = nil
+    SkinChanger.CurrentSkin = skinName
+    local weapon = GetWeapon()
+    if weapon and weapon.Name == weaponName then
+        SkinChanger.CurrentWeapon = weapon
+        ApplySkin()
+    end
+end
+
+function SkinChanger:BuildUI(Tabs)
+    local SkinTab = Tabs
+
+    local SkinBox = SkinTab:AddLeftGroupbox("Skin Changer")
+
+    SkinBox:AddToggle("Skin_Enabled", {
+        Text = "Enable Skin Changer",
+        Default = false,
+        Callback = function(value)
+            SkinChanger.Enabled = value
+            if value then
+                ApplySkin()
+            end
+        end
+    })
+
+    SkinBox:AddDropdown("Skin_Material", {
+        Text = "Material",
+        Values = {"Plastic", "Metal", "Neon", "Ice", "Glow"},
+        Default = 1,
+        Callback = function(value)
+            SkinChanger.Material = value
+            ApplySkin()
+        end
+    })
+
+    SkinBox:AddSlider("Skin_Transparency", {
+        Text = "Transparency",
+        Default = 0,
+        Min = 0,
+        Max = 1,
+        Rounding = 2,
+        Callback = function(value)
+            SkinChanger.Transparency = value
+            ApplySkin()
+        end
+    })
+
+    SkinBox:AddToggle("Skin_ApplyAll", {
+        Text = "Apply to All Parts",
+        Default = false,
+        Callback = function(value)
+            SkinChanger.ApplyToAllParts = value
+            ApplySkin()
+        end
+    })
+
+    SkinBox:AddButton("Apply Now", function()
+        ApplySkin()
+    end)
 end
 
 return SkinChanger
