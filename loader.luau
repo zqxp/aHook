@@ -203,17 +203,23 @@ local function RunLoader()
 	end
 	task.wait(0.3)
 
-	-- Step 3: Addons
+	-- Step 3: Addons (wrapped in pcall to prevent crashes)
 	UpdateLoading("Loading Addons...", 0.25)
 	local addonSrc = FetchModule(BaseRepo .. "addons.luau")
 	if addonSrc then
-		local ok, fn = pcall(loadstring, addonSrc)
-		if ok and fn then
-			local ok2, tm, sm = pcall(fn)
-			if ok2 then
+		local success, fn = pcall(loadstring, addonSrc)
+		if success and fn then
+			local ok, tm, sm = pcall(fn)
+			if ok then
 				ThemeManager, SaveManager = tm, sm
+			else
+				warn("aHook: Addons exec error: " .. tostring(tm))
 			end
+		else
+			warn("aHook: Addons compile error: " .. tostring(fn))
 		end
+	else
+		warn("aHook: Addons fetch failed")
 	end
 	task.wait(0.3)
 
