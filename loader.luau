@@ -211,9 +211,12 @@ local function RunLoader()
 	UpdateLoading("Loading Addons...", 0.25)
 	local addonSrc = FetchModule(BaseRepo .. "addons.luau")
 	if addonSrc then
-		local success, addons = pcall(loadstring, addonSrc)
-		if success and addons then
-			ThemeManager, SaveManager = addons[1], addons[2]
+		local ok, fn = pcall(loadstring, addonSrc)
+		if ok and fn then
+			local ok2, addons = pcall(fn)
+			if ok2 and type(addons) == "table" then
+				ThemeManager, SaveManager = addons[1], addons[2]
+			end
 		end
 	end
 	task.wait(0.3)
