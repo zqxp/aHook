@@ -76,22 +76,26 @@ end
 local HttpService = game:GetService("HttpService")
 
 local function FetchModule(url, isLarge)
-	local retries = isLarge and 5 or 3
-	local waitTime = isLarge and 1.5 or 0.5
+	local methods = {
+		function() return game:HttpGet(url) end,
+		function() return HttpService:GetAsync(url) end,
+	}
+	if isLarge then
+		-- Try HttpService first for large files (different executors handle it differently)
+		methods = {
+			function() return HttpService:GetAsync(url) end,
+			function() return game:HttpGet(url) end,
+		}
+	end
+	local retries = 3
+	local waitTime = isLarge and 1.0 or 0.5
 	for i = 1, retries do
-		local result
-		local ok = pcall(function()
-			result = game:HttpGet(url)
-		end)
-		if ok and result and #result > 0 then
-			return result
-		end
-		if not ok and not isLarge then
-			-- Try HttpService as fallback
-			pcall(function()
-				result = HttpService:GetAsync(url)
+		for _, method in ipairs(methods) do
+			local result
+			local ok = pcall(function()
+				result = method()
 			end)
-			if result and #result > 0 then
+			if ok and result and #result > 0 then
 				return result
 			end
 		end
