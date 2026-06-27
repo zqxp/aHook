@@ -121,49 +121,7 @@ local function LoadModule(name)
 	return mod
 end
 
--- Anti-cheat bypass (inline, safe, no getgc, no require)
-local function SetupAntiCheat()
-	task.spawn(function()
-		local remote = pcall(function()
-			local r = ReplicatedStorage:FindFirstChild("Remotes")
-			if r then
-				local ap = r:FindFirstChild("AnalyticsPipeline")
-				if ap then
-					return ap:FindFirstChild("RemoteEvent")
-				end
-			end
-		end)
-		if type(remote) == "userdata" and remote.OnClientEvent then
-			for _, conn in pairs(getconnections(remote.OnClientEvent)) do
-				if conn and conn.Function then
-					pcall(hookfunction, conn.Function, newcclosure(function() end))
-				end
-			end
-		end
-	end)
 
-	task.spawn(function()
-		for _, conn in pairs(getconnections(LogService.MessageOut)) do
-			if conn and conn.Function then
-				pcall(hookfunction, conn.Function, newcclosure(function() end))
-			end
-		end
-	end)
-
-	task.spawn(function()
-		for _, conn in ipairs(getconnections(ScriptContext.Error)) do
-			pcall(conn.Disable, conn)
-		end
-		pcall(hookfunction, ScriptContext.Error.Connect, newcclosure(function() return nil end))
-	end)
-
-	task.spawn(function()
-		local old = hookfunction(LocalPlayer.Kick, newcclosure(function(self, ...)
-			if self == LocalPlayer then return end
-			return old(self, ...)
-		end))
-	end)
-end
 
 local function RunLoader()
 	-- Step 1: UI Library
@@ -200,13 +158,8 @@ local function RunLoader()
 	end
 	task.wait(0.1)
 
-	-- Step 2: AC Bypass (inline)
-	UpdateLoading("Bypassing Anti-Cheat...", 0.2)
-	SetupAntiCheat()
-	task.wait(0.2)
-
-	-- Step 3: Addons
-	UpdateLoading("Loading Addons...", 0.25)
+	-- Step 2: Addons
+	UpdateLoading("Loading Addons...", 0.15)
 	local addonSrc = FetchModule(BaseRepo .. "addons.luau")
 	if addonSrc then
 		local fn, cerr = loadstring(addonSrc)
@@ -244,33 +197,37 @@ local function RunLoader()
 	getgenv().Storage = Storage
 
 	-- Step 6: Load feature modules (parallel spawns)
+	UpdateLoading("Loading AntiCheat...", 0.3)
+	local AntiCheat = LoadModule("anticheat")
+	task.wait(0.05)
+
 	UpdateLoading("Loading Combat...", 0.4)
 	local Combat = LoadModule("combat")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	UpdateLoading("Loading Rage System...", 0.45)
 	local RageSystem = LoadModule("ragesystem")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	UpdateLoading("Loading ESP...", 0.5)
 	local ESP = LoadModule("esp")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	UpdateLoading("Loading Visuals...", 0.55)
 	local Visuals = LoadModule("visuals")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	UpdateLoading("Loading Movement...", 0.6)
 	local Movement = LoadModule("movement")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	UpdateLoading("Loading Skin Changer...", 0.65)
 	local SkinChanger = LoadModule("skinchanger")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	UpdateLoading("Loading Animation...", 0.7)
 	local Animation = LoadModule("animation")
-	task.wait(0.1)
+	task.wait(0.05)
 
 	-- Step 7: Build UI
 	UpdateLoading("Building UI...", 0.8)
@@ -280,6 +237,7 @@ local function RunLoader()
 	if Visuals and Visuals.BuildUI then Visuals:BuildUI(Tabs.Visuals) end
 	if Movement and Movement.BuildUI then Movement:BuildUI(Tabs.Movement) end
 	if SkinChanger and SkinChanger.BuildUI then SkinChanger:BuildUI(Tabs.Skins) end
+	if AntiCheat and AntiCheat.BuildUI then AntiCheat:BuildUI(Tabs.Rage) end
 
 	-- Config tab
 	local ConfigLeft = Tabs.Config:AddLeftGroupbox("Themes")
@@ -367,20 +325,19 @@ local function RunLoader()
 	Library.ToggleKeybind = MenuKey
 
 	-- Step 8: Init modules
+	if AntiCheat and AntiCheat.Init then AntiCheat:Init() end
 	if Combat and Combat.Init then Combat:Init() end
 	if RageSystem and RageSystem.Init then RageSystem:Init() end
 	if ESP and ESP.Init then ESP:Init() end
 	if Visuals and Visuals.Init then Visuals:Init() end
 	if Movement and Movement.Init then Movement:Init() end
 	if SkinChanger and SkinChanger.Init then SkinChanger:Init() end
-	if Animation and Animation.SetupHook then
-		Animation:SetupHook()
-		Animation:SetupCharacterWatcher()
-	end
+	if Animation and Animation.Init then Animation:Init() end
 
 	-- Watermark
 	Library:SetWatermarkVisibility(false)
 	Library:OnUnload(function()
+		if AntiCheat and AntiCheat.Cleanup then AntiCheat:Cleanup() end
 		if Combat and Combat.Cleanup then Combat:Cleanup() end
 		if RageSystem and RageSystem.Cleanup then RageSystem:Cleanup() end
 		if ESP and ESP.Cleanup then ESP:Cleanup() end
