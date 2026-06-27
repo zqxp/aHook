@@ -5,17 +5,13 @@ local ScriptContext = game:GetService("ScriptContext")
 local LocalPlayer = Players.LocalPlayer
 
 task.spawn(function()
-	local hooked = 0
-	for _, v in pairs(getgc(true)) do
-		if typeof(v) == "function" then
-			local ok, src = pcall(function()
-				return debug.info(v, "s")
-			end)
-			if ok and type(src) == "string" and string.find(src, "AnalyticsPipelineController") then
-				hooked = hooked + 1
-				hookfunction(v, newcclosure(function(...)
-					return wait(9e9)
-				end))
+	local ok, mod = pcall(function()
+		return require(game:GetService("ReplicatedFirst"):WaitForChild("AnalyticsPipelineController", 5))
+	end)
+	if ok and type(mod) == "table" then
+		for _, name in ipairs({ "reportEvent", "reportCounter", "reportStats" }) do
+			if type(mod[name]) == "function" then
+				pcall(hookfunction, mod[name], newcclosure(function() task.wait(9e9) end))
 			end
 		end
 	end
