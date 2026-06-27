@@ -75,13 +75,20 @@ end
 
 local HttpService = game:GetService("HttpService")
 
+local function Sanitize(str)
+	-- Strip UTF-8 BOM and any other leading junk
+	str = str:gsub("^\239\187\191", "")
+		:gsub("^\254\255", "")
+		:gsub("^\255\254", "")
+	return str
+end
+
 local function FetchModule(url, isLarge)
 	local methods = {
 		function() return game:HttpGet(url) end,
 		function() return HttpService:GetAsync(url) end,
 	}
 	if isLarge then
-		-- Try HttpService first for large files (different executors handle it differently)
 		methods = {
 			function() return HttpService:GetAsync(url) end,
 			function() return game:HttpGet(url) end,
@@ -96,7 +103,7 @@ local function FetchModule(url, isLarge)
 				result = method()
 			end)
 			if ok and result and #result > 0 then
-				return result
+				return Sanitize(result)
 			end
 		end
 		task.wait(waitTime)
@@ -105,8 +112,6 @@ local function FetchModule(url, isLarge)
 end
 
 local function TryLoadString(src, name)
-	-- Strip UTF-8 BOM if present
-	src = src:gsub("^\239\187\191", "")
 	local fn, compileErr = loadstring(src)
 	if not fn then
 		return nil, "compile error: " .. tostring(compileErr)
@@ -176,7 +181,7 @@ local function RunLoader()
 		if lib then
 			Library = lib
 		else
-			libErr = loadErr
+			libErr = loadErr .. " (first bytes: " .. libSrc:sub(1, 8):gsub(".", function(c) return string.format("%02X ", string.byte(c)) end) .. ")"
 		end
 	else
 		libErr = libErr or "fetch returned nil"
