@@ -402,12 +402,12 @@ local function RunLoader()
 	-- Menu keybind
 	local MenuGroup = Tabs.Config:AddLeftGroupbox("Menu")
 	MenuGroup:AddButton("Unload", function() Library:Unload() end)
-	MenuGroup:AddLabel("Menu Key"):AddKeyPicker("MenuKeybind", {
+	local MenuKey = MenuGroup:AddLabel("Menu Key"):AddKeyPicker("MenuKeybind", {
 		Default = "LeftShift",
 		NoUI = true,
 		Text = "Menu Key"
 	})
-	Library.ToggleKeybind = Options.MenuKeybind
+	Library.ToggleKeybind = MenuKey
 
 	-- Step 8: Init modules
 	if Combat and Combat.Init then
@@ -433,8 +433,8 @@ local function RunLoader()
 		Animation:SetupCharacterWatcher()
 	end
 
-	-- Watermark
-	Library:SetWatermarkVisibility(true)
+	-- Watermark (hidden by default)
+	Library:SetWatermarkVisibility(false)
 	local frameTimer = tick()
 	local frameCounter = 0
 	local fps = 60
