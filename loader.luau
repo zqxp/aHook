@@ -105,6 +105,8 @@ local function FetchModule(url, isLarge)
 end
 
 local function TryLoadString(src, name)
+	-- Strip UTF-8 BOM if present
+	src = src:gsub("^\239\187\191", "")
 	local fn, compileErr = loadstring(src)
 	if not fn then
 		return nil, "compile error: " .. tostring(compileErr)
