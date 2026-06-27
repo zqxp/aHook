@@ -168,13 +168,6 @@ local function RunLoader()
 	end
 	task.wait(0.1)
 
-	Library.FontColor = Color3.fromRGB(220, 220, 220)
-	Library.MainColor = Color3.fromRGB(18, 18, 18)
-	Library.BackgroundColor = Color3.fromRGB(24, 24, 24)
-	Library.AccentColor = Color3.fromRGB(200, 200, 200)
-	Library.OutlineColor = Color3.fromRGB(40, 40, 40)
-	Library.RiskColor = Color3.fromRGB(255, 60, 60)
-
 	UpdateLoading("Loading Addons...", 0.15)
 	local addonSrc = FetchModule(BaseRepo .. "addons.luau")
 	if addonSrc then
@@ -241,6 +234,15 @@ local function RunLoader()
 	if Movement and Movement.BuildUI then Movement:BuildUI(Tabs.Movement) end
 	if SkinChanger and SkinChanger.BuildUI then SkinChanger:BuildUI(Tabs.Skins) end
 	if AntiCheat and AntiCheat.BuildUI then AntiCheat:BuildUI(Tabs.Rage) end
+
+	Library.FontColor = Color3.fromRGB(220, 220, 220)
+	Library.MainColor = Color3.fromRGB(18, 18, 18)
+	Library.BackgroundColor = Color3.fromRGB(24, 24, 24)
+	Library.AccentColor = Color3.fromRGB(200, 200, 200)
+	Library.AccentColorDark = Library:GetDarkerColor(Library.AccentColor)
+	Library.OutlineColor = Color3.fromRGB(40, 40, 40)
+	Library.RiskColor = Color3.fromRGB(255, 60, 60)
+	pcall(function() Library:UpdateColorsUsingRegistry() end)
 
 	local ConfigLeft = Tabs.Config:AddLeftGroupbox("Themes")
 	local ConfigRight = Tabs.Config:AddRightGroupbox("Configuration")
